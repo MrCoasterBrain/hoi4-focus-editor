@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Tree Editor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══ TOOLBAR ═══════════════════════════════════════════════════════════════ -->
+<div id="toolbar">
+  <span id="toolbar-title">⚔ Focus Tree Editor</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="openTreePanel()">🌳 Tree Settings</button>
+  <button class="tb-btn" id="btn-add-focus" onclick="addRootFocus()">＋ New Focus</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn danger" onclick="if(state.selectedId){deleteNode(state.selectedId);state.selectedId=null;closePanel();renderAll();}">✕ Delete</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="resetView()">⌖ Reset</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="exportJSON()">↓ JSON</button>
+  <button class="tb-btn" onclick="exportHoI4()">↓ HoI4</button>
+  <button class="tb-btn" onclick="importJSON()">↑ JSON</button>
+  <button class="tb-btn" onclick="importHoI4()">↑ HoI4</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="btn-toggle-console" data-badge="" onclick="AppConsole.toggle()">⌨ Console</button>
+  <span class="tb-hint">RMB drag = Pan · Scroll = Zoom · Click = Select · Del = Delete</span>
+</div>
+
+<!-- ══ CANVAS ════════════════════════════════════════════════════════════════ -->
+<div id="canvas-wrap">
+  <div id="world">
+    <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<!-- ══ CONTEXT MENU ══════════════════════════════════════════════════════════ -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxEdit()">✎ Edit properties</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" onclick="ctxDelete()">🗑 Delete focus</div>
+</div>
+
+<!-- ══ EDIT PANEL ════════════════════════════════════════════════════════════ -->
+<div id="edit-panel">
+
+  <!-- ── FOCUS SUB-PANEL ──────────────────────────────────── -->
+  <div id="panel-focus">
+    <h3>Focus Properties</h3>
+
+    <div class="field-group">
+      <label class="field-label">Display Name</label>
+      <input class="field-input" id="ep-label" type="text" placeholder="Visible label..."
+             oninput="updateNodeProp('label',this.value)">
+    </div>
+
+    <div class="panel-section-title">HoI4 Identifiers</div>
+
+    <div class="field-group">
+      <label class="field-label">Focus ID</label>
+      <input class="field-input" id="ep-focus-id" type="text" placeholder="GER_focus_name"
+             onblur="updateFocusId(this.value)">
+      <span class="field-hint">Rename on blur — updates all references</span>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">GFX Icon (GFX name)</label>
+      <input class="field-input" id="ep-gfx" type="text" placeholder="GFX_goal_unknown"
+             oninput="updateNodeProp('gfxIcon',this.value)">
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Icon Picker</label>
+      <input type="text" id="ep-icon-search" placeholder="Search icons…">
+      <div id="ep-icon-grid"></div>
+    </div>
+
+    <div class="panel-section-title">Parameters</div>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label">Cost</label>
+        <input class="field-input" id="ep-cost" type="number" min="0" placeholder="10"
+               oninput="updateNodeProp('cost',+this.value)">
+      </div>
+      <div class="cost-display" id="ep-cost-days">70 days</div>
+    </div>
+
+    <div class="field-group">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text-dim)">
+        <input type="checkbox" id="ep-cancel" onchange="updateNodeProp('cancel_if_invalid',this.checked)"
+               style="accent-color:var(--gold)">
+        cancel_if_invalid
+      </label>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Search Filters</label>
+      <div class="filter-wrap" id="filter-wrap"></div>
+    </div>
+
+    <div class="panel-section-title">Relations</div>
+
+    <div class="field-group">
+      <label class="field-label">prerequisite</label>
+      <input class="field-input" id="ep-prereq" type="text"
+             placeholder="GER_national_unity"
+             onblur="updateRelationProp('prerequisite',this.value)">
+      <span class="field-hint">Comma-separated Focus IDs</span>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">mutually_exclusive</label>
+      <input class="field-input" id="ep-mutex" type="text"
+             placeholder="GER_other_branch"
+             onblur="updateRelationProp('mutually_exclusive',this.value)">
+      <span class="field-hint">Symmetric — also updates the other focus</span>
+    </div>
+
+    <div class="panel-section-title">Script Blocks</div>
+
+    <div class="field-group">
+      <label class="field-label">available = { … }</label>
+      <textarea class="field-input" id="ep-available" rows="2" placeholder="has_war = no"
+                oninput="updateNodeProp('available',this.value)"></textarea>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">bypass = { … }</label>
+      <textarea class="field-input" id="ep-bypass" rows="2" placeholder="has_war = yes"
+                oninput="updateNodeProp('bypass',this.value)"></textarea>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">completion_reward = { … }</label>
+      <textarea class="field-input" id="ep-reward" rows="3" placeholder="add_manpower = 1000"
+                oninput="updateNodeProp('completion_reward',this.value)"></textarea>
+    </div>
+
+    <button class="panel-btn danger" onclick="if(state.selectedId){deleteNode(state.selectedId);state.selectedId=null;closePanel();renderAll();}">🗑 Delete Focus</button>
+    <button class="panel-btn" onclick="closePanel()">✕ Close</button>
+  </div>
+
+  <!-- ── TREE SETTINGS SUB-PANEL ──────────────────────────── -->
+  <div id="panel-tree" style="display:none">
+    <h3>Tree Settings</h3>
+
+    <div class="panel-section-title" style="border-top:none;padding-top:0">Identity</div>
+
+    <div class="field-group">
+      <label class="field-label">focus_tree id</label>
+      <input class="field-input" id="tp-tree-id" type="text" placeholder="GER_focus_tree"
+             oninput="updateTreeMeta('treeId',this.value)">
+    </div>
+
+    <div class="panel-section-title">country = { … }</div>
+
+    <div class="field-group">
+      <textarea class="field-input" id="tp-country" rows="6"
+                placeholder="base = 0&#10;modifier = {&#10;    tag = 25&#10;    original_tag = GER&#10;}"
+                oninput="updateTreeMeta('countryBlock',this.value)"
+                style="font-family:'JetBrains Mono',monospace;font-size:11px"></textarea>
+      <span class="field-hint">Raw Clausewitz code inside country = { }</span>
+    </div>
+
+    <div class="panel-section-title">Initial Show</div>
+
+    <div class="field-group">
+      <label class="field-label">initial_show_position focus</label>
+      <input class="field-input" id="tp-initial-focus" type="text" placeholder="GER_national_unity"
+             oninput="updateTreeMeta('initialShowFocus',this.value)">
+    </div>
+
+    <div class="panel-section-title">Continuous Focus Position</div>
+
+    <div class="field-row">
+      <div class="field-group">
+        <label class="field-label">x (px)</label>
+        <input class="field-input" id="tp-cf-x" type="number" placeholder="100"
+               oninput="updateTreeMeta('cfX',+this.value)">
+      </div>
+      <div class="field-group">
+        <label class="field-label">y (px)</label>
+        <input class="field-input" id="tp-cf-y" type="number" placeholder="1230"
+               oninput="updateTreeMeta('cfY',+this.value)">
+      </div>
+    </div>
+    <span class="field-hint">Or drag the dashed zone on the canvas</span>
+
+    <div class="panel-section-title">mean_time_to_happen = { … }</div>
+
+    <div class="field-group">
+      <textarea class="field-input" id="tp-mtth" rows="4"
+                placeholder="days = 30&#10;modifier = {&#10;    factor = 0.5&#10;}"
+                oninput="updateTreeMeta('mtth',this.value)"
+                style="font-family:'JetBrains Mono',monospace;font-size:11px"></textarea>
+    </div>
+
+    <button class="panel-btn" onclick="closePanel()">✕ Close</button>
+  </div>
+</div>
+
+<!-- ══ CONSOLE ═══════════════════════════════════════════════════════════════ -->
+<div id="app-console">
+  <div id="app-console-header">
+    <span id="app-console-title">Console</span>
+    <button id="app-console-clear" onclick="AppConsole.clear()">Clear</button>
+  </div>
+  <div id="app-console-body"></div>
+</div>
+
+<!-- ══ MISC ══════════════════════════════════════════════════════════════════ -->
+<div id="tooltip"></div>
+<div id="zoom-indicator">100%</div>
+
+<!-- ══ SCRIPTS ═══════════════════════════════════════════════════════════════ -->
+<script src="js/sprites.js"></script>
+<script src="js/constants.js"></script>
+<script src="js/state.js"></script>
+<script src="js/console.js"></script>
+<script src="js/nodes.js"></script>
+<script src="js/render.js"></script>
+<script src="js/canvas.js"></script>
+<script src="js/panel.js"></script>
+<script src="js/io.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
