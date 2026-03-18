@@ -17,7 +17,7 @@ function importJSON() {
       state.treeMeta = { ...state.treeMeta, ...(d.treeMeta || {}) };
       state.selectedId = null;
       closePanel(); renderAll();
-      AppConsole.log(`Imported JSON: ${Object.keys(state.nodes).length} focuses.`);
+      AppConsole.log('Imported JSON: ' + Object.keys(state.nodes).length + ' focuses.');
     } catch(e) { AppConsole.error('Import JSON: ' + e.message); }
   });
 }
@@ -27,43 +27,42 @@ function exportHoI4() {
   try {
     const m = state.treeMeta;
     const T = '    ';
-    let out = `focus_tree = {\n`;
-    out += `${T}id = ${m.treeId}\n`;
-    // country block — output raw as given
+    let out = 'focus_tree = {\n';
+    out += T + 'id = ' + m.treeId + '\n';
     if (m.countryBlock && m.countryBlock.trim()) {
-      out += `${T}country = {\n`;
-      m.countryBlock.split('\n').forEach(line => { out += `${T}${T}${line.trim()}\n`; });
-      out += `${T}}\n`;
+      out += T + 'country = {\n';
+      m.countryBlock.split('\n').forEach(line => { out += T + T + line.trim() + '\n'; });
+      out += T + '}\n';
     }
     if (m.mtth && m.mtth.trim()) {
-      out += `${T}mean_time_to_happen = {\n`;
-      m.mtth.split('\n').forEach(line => { out += `${T}${T}${line.trim()}\n`; });
-      out += `${T}}\n`;
+      out += T + 'mean_time_to_happen = {\n';
+      m.mtth.split('\n').forEach(line => { out += T + T + line.trim() + '\n'; });
+      out += T + '}\n';
     }
-    out += `${T}continuous_focus_position = { x = ${m.cfX} y = ${m.cfY} }\n`;
-    if (m.initialShowFocus) out += `${T}initial_show_position = { focus = ${m.initialShowFocus} }\n`;
-    out += `\n`;
+    out += T + 'continuous_focus_position = { x = ' + m.cfX + ' y = ' + m.cfY + ' }\n';
+    if (m.initialShowFocus) out += T + 'initial_show_position = { focus = ' + m.initialShowFocus + ' }\n';
+    out += '\n';
 
     Object.values(state.nodes).forEach(n => {
-      const hx = Math.round(n.x / GRID_SIZE * 2);
-      const hy = Math.round(n.y / GRID_SIZE);
-      out += `${T}focus = {\n`;
-      out += `${T}${T}id = ${n.id}\n`;
-      out += `${T}${T}x = ${hx}\n`;
-      out += `${T}${T}y = ${hy}\n`;
-      out += `${T}${T}icon = ${n.gfxIcon || DEFAULT_ICON}\n`;
-      out += `${T}${T}cost = ${n.cost}\n`;
+      const hx = Math.round(n.x / GRID_SIZE);
+      const hy = Math.round(n.y / (GRID_SIZE * 2));
+      out += T + 'focus = {\n';
+      out += T+T + 'id = ' + n.id + '\n';
+      out += T+T + 'x = ' + hx + '\n';
+      out += T+T + 'y = ' + hy + '\n';
+      out += T+T + 'icon = ' + (n.gfxIcon || DEFAULT_ICON) + '\n';
+      out += T+T + 'cost = ' + n.cost + '\n';
       if (n.search_filters && n.search_filters.length)
-        out += `${T}${T}search_filters = { ${n.search_filters.join(' ')} }\n`;
-      (n.prerequisite       || []).forEach(pid => { out += `${T}${T}prerequisite = { focus = ${pid} }\n`; });
-      (n.mutually_exclusive || []).forEach(eid => { out += `${T}${T}mutually_exclusive = { focus = ${eid} }\n`; });
-      if (n.available)         out += `${T}${T}available = {\n${T}${T}${T}${n.available.trim()}\n${T}${T}}\n`;
-      if (n.bypass)            out += `${T}${T}bypass = {\n${T}${T}${T}${n.bypass.trim()}\n${T}${T}}\n`;
-      if (n.cancel_if_invalid) out += `${T}${T}cancel_if_invalid = yes\n`;
-      if (n.completion_reward) out += `${T}${T}completion_reward = {\n${T}${T}${T}${n.completion_reward.trim()}\n${T}${T}}\n`;
-      out += `${T}}\n\n`;
+        out += T+T + 'search_filters = { ' + n.search_filters.join(' ') + ' }\n';
+      (n.prerequisite       || []).forEach(pid => { out += T+T + 'prerequisite = { focus = ' + pid + ' }\n'; });
+      (n.mutually_exclusive || []).forEach(eid => { out += T+T + 'mutually_exclusive = { focus = ' + eid + ' }\n'; });
+      if (n.available)         out += T+T + 'available = {\n' + T+T+T + n.available.trim() + '\n' + T+T + '}\n';
+      if (n.bypass)            out += T+T + 'bypass = {\n' + T+T+T + n.bypass.trim() + '\n' + T+T + '}\n';
+      if (n.cancel_if_invalid) out += T+T + 'cancel_if_invalid = yes\n';
+      if (n.completion_reward) out += T+T + 'completion_reward = {\n' + T+T+T + n.completion_reward.trim() + '\n' + T+T + '}\n';
+      out += T + '}\n\n';
     });
-    out += `}\n`;
+    out += '}\n';
 
     _download(out, 'focus_tree.txt', 'text/plain');
     AppConsole.log('Exported HoI4 .txt.');
@@ -79,105 +78,179 @@ function importHoI4() {
       state.treeMeta = { ...state.treeMeta, ...result.treeMeta };
       state.selectedId = null;
       closePanel(); renderAll();
-      AppConsole.log(`Imported HoI4: ${Object.keys(state.nodes).length} focuses.`);
+      AppConsole.log('Imported HoI4: ' + Object.keys(state.nodes).length + ' focuses.');
     } catch(e) { AppConsole.error('Import HoI4: ' + e.message); }
   });
 }
 
 // ── HoI4 parser ───────────────────────────────────────────────
 function parseHoI4FocusTree(text) {
-  const src    = text.replace(/#[^\n]*/g, '');
-  const tokens = tokeniseClausewitz(src);
-  const root   = parseBlock(tokens, 0).block;
+  // Strip line comments
+  var src    = text.replace(/#[^\n]*/g, '');
+  var tokens = tokeniseClausewitz(src);
+  var outerBlock = parseBlock(tokens, 0).block;
+  // Unwrap focus_tree = { ... } wrapper if present
+  var root;
+  if (outerBlock.length === 1 && outerBlock[0].key === 'focus_tree' && outerBlock[0].block) {
+    root = outerBlock[0].block;
+    AppConsole.log('Unwrapped focus_tree block.');
+  } else {
+    root = outerBlock;
+  }
 
-  const treeMeta = {
+  var treeMeta = {
     treeId: '', countryBlock: '', mtth: '',
     initialShowFocus: '', cfX: 100, cfY: 1230,
   };
-  const nodes = {};
+  var nodes = {};
+  // Store raw relative positioning info for second pass
+  var rawFocuses = []; // { id, relId, rawX, rawY }
 
-  root.forEach(item => {
+  root.forEach(function(item) {
     if (!item || item.type !== 'assign') return;
-    switch (item.key) {
-      case 'id':
-        treeMeta.treeId = item.value; break;
-      case 'country':
-        treeMeta.countryBlock = blockToRaw(item.block || [], ''); break;
-      case 'mean_time_to_happen':
-        treeMeta.mtth = blockToRaw(item.block || [], ''); break;
-      case 'continuous_focus_position': {
-        const blk  = item.block || [];
-        const xIt  = blk.find(b => b.key === 'x'), yIt = blk.find(b => b.key === 'y');
-        if (xIt) treeMeta.cfX = Math.round(+xIt.value * GRID_SIZE / 2);
-        if (yIt) treeMeta.cfY = Math.round(+yIt.value * GRID_SIZE / 2);
-        break;
-      }
-      case 'initial_show_position': {
-        const fIt = (item.block || []).find(b => b.key === 'focus');
-        if (fIt) treeMeta.initialShowFocus = fIt.value;
-        break;
-      }
-      case 'focus': {
-        const blk = item.block || [];
-        const g = k => { const it = blk.find(b => b.key === k); return it ? it.value : ''; };
-        const fid = g('id'); if (!fid) { AppConsole.warn('Focus block with no id, skipped'); break; }
 
-        const rawX = +g('x') || 0, rawY = +g('y') || 0;
-        const node = {
-          id:                 fid,
-          x:                  snap(Math.round(rawX * GRID_SIZE / 2)),
-          y:                  snap(rawY * GRID_SIZE),
-          label:              fid,
-          gfxIcon:            g('icon') || DEFAULT_ICON,
-          cost:               +g('cost') || 10,
-          search_filters:     [],
-          prerequisite:       [],
-          mutually_exclusive: [],
-          completion_reward:  '',
-          available:          '',
-          bypass:             '',
-          cancel_if_invalid:  false,
-        };
+    if (item.key === 'id') {
+      treeMeta.treeId = item.value;
 
-        blk.forEach(it => {
-          if (it.type !== 'assign') return;
-          switch (it.key) {
-            case 'prerequisite': {
-              const f = (it.block || []).find(b => b.key === 'focus');
-              if (f && !node.prerequisite.includes(f.value)) node.prerequisite.push(f.value);
-              break;
-            }
-            case 'mutually_exclusive': {
-              const f = (it.block || []).find(b => b.key === 'focus');
-              if (f && !node.mutually_exclusive.includes(f.value)) node.mutually_exclusive.push(f.value);
-              break;
-            }
-            case 'search_filters': {
-              (it.block || []).forEach(t => {
-                if (t.type === 'value' && !node.search_filters.includes(t.value)) node.search_filters.push(t.value);
-              });
-              break;
-            }
-            case 'completion_reward': node.completion_reward = blockToRaw(it.block || [], ''); break;
-            case 'available':        node.available          = blockToRaw(it.block || [], ''); break;
-            case 'bypass':           node.bypass             = blockToRaw(it.block || [], ''); break;
-            case 'cancel_if_invalid': node.cancel_if_invalid = it.value === 'yes'; break;
-          }
-        });
-        nodes[fid] = node;
-        break;
+    } else if (item.key === 'country') {
+      treeMeta.countryBlock = blockToRaw(item.block || [], '');
+
+    } else if (item.key === 'mean_time_to_happen') {
+      treeMeta.mtth = blockToRaw(item.block || [], '');
+
+    } else if (item.key === 'continuous_focus_position') {
+      var blk = item.block || [];
+      var xIt = blk.find(function(b){ return b.key === 'x'; });
+      var yIt = blk.find(function(b){ return b.key === 'y'; });
+      // Values are already pixels
+      if (xIt) treeMeta.cfX = parseFloat(xIt.value) || 100;
+      if (yIt) treeMeta.cfY = parseFloat(yIt.value) || 1230;
+
+    } else if (item.key === 'initial_show_position') {
+      var fIt = (item.block || []).find(function(b){ return b.key === 'focus'; });
+      if (fIt) treeMeta.initialShowFocus = fIt.value;
+
+    } else if (item.key === 'focus') {
+      var blk = item.block || [];
+
+      // Get first value for a simple key
+      function gv(k) {
+        var it = blk.find(function(b){ return b.key === k; });
+        return it ? it.value : '';
       }
+
+      var fid = gv('id');
+      if (!fid) { AppConsole.warn('Focus block with no id — skipped'); return; }
+
+      var rawX = parseFloat(gv('x')) || 0;
+      var rawY = parseFloat(gv('y')) || 0;
+      var relId = gv('relative_position_id') || '';
+
+      var node = {
+        id:                 fid,
+        // Initial coords from x/y — will be adjusted in second pass if relId exists
+        x:                  snap(Math.round(rawX * GRID_SIZE)),
+        y:                  snap(rawY * GRID_SIZE * 2),
+        label:              fid,
+        gfxIcon:            gv('icon') || DEFAULT_ICON,
+        cost:               parseFloat(gv('cost')) || 10,
+        search_filters:     [],
+        prerequisite:       [],
+        mutually_exclusive: [],
+        completion_reward:  '',
+        available:          '',
+        bypass:             '',
+        cancel_if_invalid:  false,
+      };
+
+      // Iterate all items in focus block
+      blk.forEach(function(it) {
+        if (it.type !== 'assign') return;
+
+        if (it.key === 'prerequisite') {
+          // Each prerequisite block can have multiple focus = entries (OR-group)
+          var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
+          focusItems.forEach(function(f) {
+            if (f.value && node.prerequisite.indexOf(f.value) === -1)
+              node.prerequisite.push(f.value);
+          });
+
+        } else if (it.key === 'mutually_exclusive') {
+          var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
+          focusItems.forEach(function(f) {
+            if (f.value && node.mutually_exclusive.indexOf(f.value) === -1)
+              node.mutually_exclusive.push(f.value);
+          });
+
+        } else if (it.key === 'search_filters') {
+          (it.block || []).forEach(function(t) {
+            if (t.type === 'value' && node.search_filters.indexOf(t.value) === -1)
+              node.search_filters.push(t.value);
+          });
+
+        } else if (it.key === 'completion_reward') {
+          node.completion_reward = blockToRaw(it.block || [], '');
+        } else if (it.key === 'available') {
+          node.available = blockToRaw(it.block || [], '');
+        } else if (it.key === 'bypass') {
+          node.bypass = blockToRaw(it.block || [], '');
+        } else if (it.key === 'cancel_if_invalid') {
+          node.cancel_if_invalid = it.value === 'yes';
+        }
+      });
+
+      nodes[fid] = node;
+      rawFocuses.push({ id: fid, relId: relId, rawX: rawX, rawY: rawY });
     }
   });
 
-  AppConsole.log(`Parsed: treeId="${treeMeta.treeId}", ${Object.keys(nodes).length} focuses.`);
-  return { nodes, treeMeta };
+  // Second pass: resolve relative_position_id
+  // Repeat until all resolved or no progress (handles chains of relative positions)
+  var maxPasses = 30;
+  var unresolved = rawFocuses.filter(function(r){ return r.relId; });
+
+  while (unresolved.length > 0 && maxPasses-- > 0) {
+    var stillUnresolved = [];
+    var progressMade = false;
+
+    unresolved.forEach(function(r) {
+      var parent = nodes[r.relId];
+      if (!parent) {
+        AppConsole.warn('relative_position_id "' + r.relId + '" not found for "' + r.id + '" — using absolute coords');
+        progressMade = true; // drop it
+        return;
+      }
+      // Check if parent still has a pending relative resolve
+      var parentEntry = rawFocuses.find(function(p){ return p.id === r.relId && p.relId; });
+      if (parentEntry && stillUnresolved.indexOf(parentEntry) !== -1) {
+        // Parent not resolved yet — defer
+        stillUnresolved.push(r);
+        return;
+      }
+      // Parent resolved — apply offset
+      nodes[r.id].x = snap(parent.x + Math.round(r.rawX * GRID_SIZE));
+      nodes[r.id].y = snap(parent.y + r.rawY * GRID_SIZE * 2);
+      progressMade = true;
+    });
+
+    if (!progressMade) break;
+    unresolved = stillUnresolved;
+  }
+
+  if (unresolved.length > 0) {
+    AppConsole.warn(unresolved.length + ' focuses could not resolve relative_position_id');
+  }
+
+  var cnt = Object.keys(nodes).length;
+  AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
+  if (cnt === 0) AppConsole.warn('No focuses found — check file format.');
+  return { nodes: nodes, treeMeta: treeMeta };
 }
 
 // ── Clausewitz tokeniser ──────────────────────────────────────
 function tokeniseClausewitz(src) {
-  const re = /("[^"]*")|([{}=])|([^\s{}="]+)/g;
-  const tokens = []; let m;
+  var re = /("[^"]*")|([{}=])|([^\s{}="]+)/g;
+  var tokens = []; var m;
   while ((m = re.exec(src)) !== null) {
     if (m[1]) tokens.push({ type: 'string', val: m[1].slice(1,-1) });
     else if (m[2]) tokens.push({ type: m[2] });
@@ -187,53 +260,53 @@ function tokeniseClausewitz(src) {
 }
 
 function parseBlock(tokens, pos) {
-  const block = [];
+  var block = [];
   while (pos < tokens.length) {
-    const t = tokens[pos];
+    var t = tokens[pos];
     if (!t) { pos++; continue; }
     if (t.type === '}') { pos++; break; }
     if ((t.type === 'word' || t.type === 'string') && tokens[pos+1] && tokens[pos+1].type === '=') {
-      const key = t.val; pos += 2;
-      const next = tokens[pos];
-      if (!next) { block.push({ type:'assign', key, value:'', block:null }); break; }
+      var key = t.val; pos += 2;
+      var next = tokens[pos];
+      if (!next) { block.push({ type:'assign', key:key, value:'', block:null }); break; }
       if (next.type === '{') {
         pos++;
-        const sub = parseBlock(tokens, pos); pos = sub.pos;
-        block.push({ type:'assign', key, value:'', block:sub.block });
+        var sub = parseBlock(tokens, pos); pos = sub.pos;
+        block.push({ type:'assign', key:key, value:'', block:sub.block });
       } else {
-        block.push({ type:'assign', key, value: next.val || '', block:null }); pos++;
+        block.push({ type:'assign', key:key, value: next.val || '', block:null }); pos++;
       }
     } else if (t.type === 'word' || t.type === 'string') {
       block.push({ type:'value', value: t.val || '' }); pos++;
     } else { pos++; }
   }
-  return { block, pos };
+  return { block: block, pos: pos };
 }
 
 function blockToRaw(block, indent) {
   if (indent === undefined) indent = '\t';
-  return block.map(item => {
+  return block.map(function(item) {
     if (item.type === 'value') return indent + item.value;
-    if (!item.block) return `${indent}${item.key} = ${item.value}`;
-    const inner = blockToRaw(item.block, indent + '\t');
-    return `${indent}${item.key} = {\n${inner}\n${indent}}`;
+    if (!item.block) return indent + item.key + ' = ' + item.value;
+    var inner = blockToRaw(item.block, indent + '\t');
+    return indent + item.key + ' = {\n' + inner + '\n' + indent + '}';
   }).join('\n');
 }
 
 // ── Helpers ───────────────────────────────────────────────────
 function _download(content, filename, mime) {
-  const blob = new Blob([content], { type: mime });
-  const a = document.createElement('a');
+  var blob = new Blob([content], { type: mime });
+  var a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
 
 function _pickFile(accept, callback) {
-  const input = document.createElement('input');
+  var input = document.createElement('input');
   input.type = 'file'; input.accept = accept;
-  input.onchange = ev => {
-    const file = ev.target.files[0]; if (!file) return;
-    const fr = new FileReader();
-    fr.onload = e => callback(e.target.result);
+  input.onchange = function(ev) {
+    var file = ev.target.files[0]; if (!file) return;
+    var fr = new FileReader();
+    fr.onload = function(e) { callback(e.target.result); };
     fr.readAsText(file);
   };
   input.click();
