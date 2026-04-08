@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Focus Tree Editor</title>
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="focus-picker.css">
 </head>
 <body>
 
@@ -104,26 +105,20 @@
 
     <div class="field-group">
       <label class="field-label">prerequisite</label>
-      <input class="field-input" id="ep-prereq" type="text"
-             placeholder="GER_national_unity"
-             onblur="updateRelationProp('prerequisite',this.value)">
-      <span class="field-hint">Comma-separated Focus IDs</span>
+      <div id="ep-prereq-wrap"></div>
+      <span class="field-hint">Comma-separated IDs — type or pick from list</span>
     </div>
 
     <div class="field-group">
       <label class="field-label">mutually_exclusive</label>
-      <input class="field-input" id="ep-mutex" type="text"
-             placeholder="GER_other_branch"
-             onblur="updateRelationProp('mutually_exclusive',this.value)">
+      <div id="ep-mutex-wrap"></div>
       <span class="field-hint">Symmetric — also updates the other focus</span>
     </div>
 
     <div class="field-group">
       <label class="field-label">relative_position_id</label>
-      <input class="field-input" id="ep-rel-pos" type="text"
-             placeholder="GER_some_focus"
-             onblur="updateRelativePositionId(this.value)">
-      <span class="field-hint">Position relative to this focus ID. Exported as offset x/y.</span>
+      <div id="ep-rel-pos-wrap"></div>
+      <span class="field-hint">Position relative to this focus. Exported as offset x/y.</span>
     </div>
 
     <div class="panel-section-title">Script Blocks</div>
@@ -172,12 +167,11 @@
       <span class="field-hint">Raw Clausewitz code inside country = { }</span>
     </div>
 
-    <div class="panel-section-title">Initial Show</div>
+    <div class="panel-section-title">Initial Show Position</div>
 
     <div class="field-group">
       <label class="field-label">initial_show_position focus</label>
-      <input class="field-input" id="tp-initial-focus" type="text" placeholder="GER_national_unity"
-             oninput="updateTreeMeta('initialShowFocus',this.value)">
+      <div id="tp-initial-focus-wrap"></div>
     </div>
 
     <div class="panel-section-title">Continuous Focus Position</div>
@@ -195,15 +189,6 @@
       </div>
     </div>
     <span class="field-hint">Or drag the dashed zone on the canvas</span>
-
-    <div class="panel-section-title">mean_time_to_happen = { … }</div>
-
-    <div class="field-group">
-      <textarea class="field-input" id="tp-mtth" rows="4"
-                placeholder="days = 30&#10;modifier = {&#10;    factor = 0.5&#10;}"
-                oninput="updateTreeMeta('mtth',this.value)"
-                style="font-family:'JetBrains Mono',monospace;font-size:11px"></textarea>
-    </div>
 
     <button class="panel-btn" onclick="closePanel()">✕ Close</button>
   </div>

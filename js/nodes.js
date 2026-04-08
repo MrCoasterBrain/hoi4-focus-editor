@@ -93,10 +93,10 @@ function getInvalidPrereqNodes() {
 function addChildNode(parentId) {
   const p = state.nodes[parentId]; if (!p) return null;
   const candidates = [
-    { x: p.x,             y: p.y + GRID_SIZE * 2 },
-    { x: p.x - GRID_SIZE, y: p.y + GRID_SIZE * 2 },
-    { x: p.x + GRID_SIZE, y: p.y + GRID_SIZE * 2 },
-    { x: p.x,             y: p.y + GRID_SIZE * 4 },
+    { x: p.x,               y: p.y + GRID_SIZE * 2 },
+    { x: p.x - GRID_SIZE,   y: p.y + GRID_SIZE * 2 },
+    { x: p.x + GRID_SIZE,   y: p.y + GRID_SIZE * 2 },
+    { x: p.x,               y: p.y + GRID_SIZE * 4 },
     { x: p.x - GRID_SIZE*2, y: p.y + GRID_SIZE * 2 },
     { x: p.x + GRID_SIZE*2, y: p.y + GRID_SIZE * 2 },
   ];
@@ -106,5 +106,7 @@ function addChildNode(parentId) {
 
   const id = makeNode(pos.x, pos.y);
   state.nodes[id].prerequisite = [parentId];
+  // Auto-set relative_position_id to parent when created via + button
+  state.nodes[id].relative_position_id = parentId;
   return id;
 }

@@ -5,6 +5,7 @@ function init() {
   buildFilterTags();
   buildIconPicker();
   setupCanvas();
+  initFocusPanelPickers();
 
   // Sample tree
   makeNode(5*GRID_SIZE*2, 1*GRID_SIZE*2, 'GER_national_unity',     'National Unity',    'GFX_focus_generic_the_giant_wakes');
