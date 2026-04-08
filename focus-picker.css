@@ -5,106 +5,148 @@
   align-items: center;
   width: 100%;
 }
-
 .focus-picker-input {
   flex: 1;
   min-width: 0;
 }
-
 .focus-picker-btn {
   flex-shrink: 0;
-  width: 26px;
-  height: 28px;
+  width: 26px; height: 28px;
   background: linear-gradient(180deg, #2a2618 0%, #1a1810 100%);
   border: 1px solid var(--border);
   color: var(--gold-dim);
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all .15s;
-  padding: 0;
-  line-height: 1;
+  font-size: 11px; cursor: pointer; border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; padding: 0; line-height: 1;
 }
-
-.focus-picker-btn:hover {
-  border-color: var(--gold-dim);
-  color: var(--gold);
-  background: #2a2618;
-}
+.focus-picker-btn:hover { border-color: var(--gold-dim); color: var(--gold); }
 
 .focus-picker-dropdown {
-  position: relative;
-  width: 100%;
-  max-height: 180px;
-  overflow-y: auto;
-  background: #090b07;
-  border: 1px solid var(--gold-dim);
-  border-radius: 2px;
-  z-index: 200;
-  margin-top: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  position: relative; width: 100%; max-height: 180px; overflow-y: auto;
+  background: #090b07; border: 1px solid var(--gold-dim); border-radius: 2px;
+  z-index: 200; margin-top: 2px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   box-shadow: 0 4px 16px rgba(0,0,0,.7);
 }
-
 .focus-picker-item {
-  padding: 5px 9px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  border-bottom: 1px solid rgba(58,48,32,.3);
-  transition: background .1s;
+  padding: 5px 9px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 1px;
+  border-bottom: 1px solid rgba(58,48,32,.3); transition: background .1s;
 }
-
-.focus-picker-item:last-child {
-  border-bottom: none;
-}
-
-.focus-picker-item:hover {
-  background: rgba(200,168,75,.12);
-}
-
-.fpi-id {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: var(--gold);
-  letter-spacing: .3px;
-}
-
-.fpi-lbl {
-  font-family: 'Crimson Text', serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
+.focus-picker-item:last-child { border-bottom: none; }
+.focus-picker-item:hover { background: rgba(200,168,75,.12); }
+.fpi-id { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--gold); letter-spacing: .3px; }
+.fpi-lbl { font-family: 'Crimson Text', serif; font-size: 11px; color: var(--text-dim); }
 .focus-picker-clear {
-  font-family: 'Crimson Text', serif;
-  font-size: 11px;
-  color: var(--text-dim);
-  font-style: italic;
-  border-bottom: 1px solid var(--border);
+  font-family: 'Crimson Text', serif; font-size: 11px; color: var(--text-dim);
+  font-style: italic; border-bottom: 1px solid var(--border);
 }
-
-.focus-picker-clear:hover {
-  color: var(--red-bright);
-  background: rgba(139,32,32,.15);
-}
-
+.focus-picker-clear:hover { color: var(--red-bright); background: rgba(139,32,32,.15); }
 .focus-picker-more {
-  font-family: 'Cinzel', serif;
-  font-size: 9px;
-  color: var(--text-dim);
-  letter-spacing: .5px;
-  text-align: center;
-  padding: 6px;
-  cursor: default;
-  font-style: normal;
+  font-family: 'Cinzel', serif; font-size: 9px; color: var(--text-dim);
+  letter-spacing: .5px; text-align: center; padding: 6px; cursor: default;
+}
+.focus-picker-more:hover { background: transparent; }
+
+/* ── FOCUS TYPE SELECT ───────────────────────────────────────── */
+.field-select {
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a6020'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+  padding-right: 24px; cursor: pointer;
+}
+.field-select option { background: #0d0f0a; color: var(--text); }
+
+/* ── TREE BOUNDARY ───────────────────────────────────────────── */
+#tree-boundary {
+  position: absolute;
+  pointer-events: none;
+  border: 1.5px solid rgba(200,168,75,.18);
+  border-radius: 3px;
+  box-shadow: inset 0 0 80px rgba(200,168,75,.03), 0 0 0 9999px rgba(0,0,0,.08);
+  z-index: 1;
 }
 
-.focus-picker-more:hover {
-  background: transparent;
+/* Nodes outside boundary (negative coords) look slightly dimmed */
+.node-outside .node-icon {
+  opacity: 0.65;
+  filter: grayscale(30%);
 }
+.node-outside .node-label { color: var(--text-dim); }
+
+/* ── NODE TYPE BADGE ─────────────────────────────────────────── */
+.node-type-badge {
+  position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+  font-family: 'Cinzel', serif; font-size: 7px; letter-spacing: 1px;
+  padding: 1px 5px; border-radius: 2px; border: 1px solid;
+  white-space: nowrap; z-index: 3; font-weight: 700;
+}
+
+/* ── PREREQUISITE GROUPS ─────────────────────────────────────── */
+#prereq-groups-container {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 4px;
+}
+
+.prereq-group {
+  background: rgba(58,48,32,.15);
+  border: 1px solid rgba(200,168,75,.2);
+  border-radius: 3px; padding: 6px 7px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+
+.prereq-group-header {
+  display: flex; align-items: center; gap: 5px;
+}
+
+.prereq-group-label {
+  font-family: 'Cinzel', serif; font-size: 9px; color: var(--text-dim);
+  letter-spacing: .8px; text-transform: uppercase; flex: 1;
+}
+
+.prereq-mode-btn {
+  font-family: 'Cinzel', serif; font-size: 9px; font-weight: 700;
+  padding: 1px 6px; border-radius: 2px; cursor: pointer;
+  border: 1px solid; background: transparent; transition: all .15s;
+  letter-spacing: .5px;
+}
+.prereq-mode-btn:hover { opacity: .8; }
+
+.prereq-del-group-btn {
+  background: none; border: 1px solid var(--red); color: var(--red-bright);
+  font-size: 10px; width: 18px; height: 18px; border-radius: 2px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.prereq-del-group-btn:hover { background: rgba(139,32,32,.3); }
+
+.prereq-entry {
+  display: flex; align-items: center; gap: 4px;
+}
+.prereq-entry-picker {
+  flex: 1; min-width: 0;
+}
+
+.prereq-del-entry-btn {
+  background: none; border: 1px solid var(--border); color: var(--text-dim);
+  font-size: 12px; width: 20px; height: 20px; border-radius: 2px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0; line-height: 1;
+}
+.prereq-del-entry-btn:hover { border-color: var(--red); color: var(--red-bright); }
+
+.prereq-add-or-btn {
+  background: rgba(42,90,138,.15); border: 1px dashed #2a5a8a;
+  color: #6ab0e0; font-family: 'Cinzel', serif; font-size: 9px;
+  letter-spacing: .5px; padding: 3px 7px; border-radius: 2px;
+  cursor: pointer; transition: all .15s; align-self: flex-start;
+}
+.prereq-add-or-btn:hover { background: rgba(42,90,138,.3); }
+
+.prereq-add-and-btn {
+  background: rgba(58,48,32,.2); border: 1px dashed var(--border);
+  color: var(--gold-dim); font-family: 'Cinzel', serif; font-size: 9px;
+  letter-spacing: .5px; padding: 4px 8px; border-radius: 2px;
+  cursor: pointer; transition: all .15s; width: 100%;
+}
+.prereq-add-and-btn:hover { border-color: var(--gold-dim); color: var(--gold); background: rgba(200,168,75,.08); }

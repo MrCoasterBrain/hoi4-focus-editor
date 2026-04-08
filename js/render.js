@@ -1,6 +1,22 @@
 // js/render.js
 
-function renderAll() { renderCF(); renderEdges(); renderNodes(); }
+function renderAll() { renderBoundary(); renderCF(); renderEdges(); renderNodes(); }
+
+// ── Tree boundary (grid origin marker) ───────────────────────
+function renderBoundary() {
+  let el = document.getElementById('tree-boundary');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tree-boundary';
+    document.getElementById('world').appendChild(el);
+  }
+  // The boundary starts at world (0,0) and extends to cover the canvas.
+  // Focuses at x>=0 and y>=0 are "inside". We show a frame around that region.
+  el.style.left   = '0px';
+  el.style.top    = '0px';
+  el.style.width  = '7800px';
+  el.style.height = '5800px';
+}
 
 // ── Continuous Focus zone ─────────────────────────────────────
 function renderCF() {
@@ -51,27 +67,53 @@ function renderEdges() {
     <marker id="arr-bad" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
       <path d="M0,0 L0,6 L8,3 z" fill="#8b2020"/>
     </marker>
+    <marker id="arr-or"  markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2a5a8a"/>
+    </marker>
   </defs>`;
 
   const badNodes = getInvalidPrereqNodes();
 
-  getEdges().forEach(e => {
-    const f = state.nodes[e.from], t = state.nodes[e.to];
-    if (!f || !t) return;
-    const isBad = e.type === 'require' && badNodes.has(t.id);
-    e.type === 'exclusive' ? drawExclusive(svg, f, t) : drawRequire(svg, f, t, isBad);
+  // Draw edges per group — OR-groups get different colour
+  Object.values(state.nodes).forEach(n => {
+    const groups = n.prerequisite_groups || [];
+    groups.forEach(group => {
+      const isOR = group.length > 1;
+      group.forEach(pid => {
+        const f = state.nodes[pid];
+        if (!f) return;
+        const isBad = badNodes.has(n.id);
+        drawRequire(svg, f, n, isBad, isOR);
+      });
+    });
+  });
+
+  // Exclusive edges
+  const seen = new Set();
+  Object.values(state.nodes).forEach(n => {
+    (n.mutually_exclusive || []).forEach(eid => {
+      if (state.nodes[eid]) {
+        const key = [n.id, eid].sort().join('|');
+        if (!seen.has(key)) { seen.add(key); drawExclusive(svg, n, state.nodes[eid]); }
+      }
+    });
   });
 }
 
-function drawRequire(svg, f, t, isBad) {
+function drawRequire(svg, f, t, isBad, isOR) {
   const x1=f.x, y1=f.y+48, x2=t.x, y2=t.y-48, my=(y1+y2)/2;
   const p = svgEl('path');
   p.setAttribute('d', `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
-  p.setAttribute('stroke', isBad ? '#8b2020' : '#4a3a20');
+  let stroke = '#4a3a20';
+  let marker = 'url(#arr)';
+  if (isBad)  { stroke = '#8b2020'; marker = 'url(#arr-bad)'; }
+  else if (isOR) { stroke = '#2a5a8a'; marker = 'url(#arr-or)'; }
+  p.setAttribute('stroke', stroke);
   p.setAttribute('stroke-width', '1.5');
   p.setAttribute('fill', 'none');
-  p.setAttribute('marker-end', isBad ? 'url(#arr-bad)' : 'url(#arr)');
+  p.setAttribute('marker-end', marker);
   if (isBad) p.setAttribute('stroke-dasharray', '4,3');
+  else if (isOR) p.setAttribute('stroke-dasharray', '6,3');
   svg.appendChild(p);
 }
 
@@ -98,11 +140,15 @@ function drawExclusive(svg, f, t) {
 
 // ── Node elements ─────────────────────────────────────────────
 function getNodeIconSrc(n) {
-  // Try gfxIcon (GFX name) → look up in sprite map → use assets/ path
   if (n.gfxIcon && SPRITE_MAP[n.gfxIcon]) return SPRITE_MAP[n.gfxIcon];
-  // fallback to GFX_goal_unknown
   return SPRITE_MAP[DEFAULT_ICON] || '';
 }
+
+// Focus type badge colours
+const TYPE_BADGE = {
+  [FOCUS_TYPE_SHARED]: { text: 'SHR', bg: '#1a3a5a', border: '#2a6a9a', color: '#6ab0e0' },
+  [FOCUS_TYPE_JOINT]:  { text: 'JNT', bg: '#2a1a4a', border: '#5a2a9a', color: '#a080e0' },
+};
 
 function renderNodes() {
   const world = document.getElementById('world');
@@ -115,18 +161,28 @@ function renderNodes() {
     const hasEx  = (n.mutually_exclusive || []).some(eid => state.nodes[eid]);
     const isBad  = badNodes.has(n.id);
     const imgSrc = getNodeIconSrc(n);
+    const label  = getNodeLabel(n);
+    const typeBadge = TYPE_BADGE[n.focusType];
+    const isOutside = n.x < 0 || n.y < 0;
 
     const el = document.createElement('div');
-    el.className = `node${isSel ? ' selected' : ''}${isBad ? ' invalid-prereq' : ''}`;
+    el.className = `node${isSel ? ' selected' : ''}${isBad ? ' invalid-prereq' : ''}${isOutside ? ' node-outside' : ''}`;
     el.id = 'node-' + n.id;
     el.style.left = n.x + 'px';
     el.style.top  = n.y + 'px';
+
+    let badgeBadge = '';
+    if (typeBadge) {
+      badgeBadge = `<div class="node-type-badge" style="background:${typeBadge.bg};border-color:${typeBadge.border};color:${typeBadge.color}">${typeBadge.text}</div>`;
+    }
+
     el.innerHTML = `
       <div class="node-icon">
         ${imgSrc ? `<img src="${imgSrc}" alt="${n.gfxIcon || ''}" draggable="false" onerror="this.style.display='none'">` : ''}
         ${hasEx ? '<div class="node-ex-badge">✕</div>' : ''}
+        ${badgeBadge}
       </div>
-      <div class="node-label">${n.label}</div>`;
+      <div class="node-label">${label}</div>`;
 
     el.addEventListener('mousedown', ev => onNodeMouseDown(ev, n.id));
     el.addEventListener('contextmenu', ev => onNodeRightClick(ev, n.id));
@@ -153,9 +209,12 @@ function showTooltip(n) {
   const t = document.getElementById('tooltip');
   const days = n.cost ? `<br><span style="color:var(--gold-dim);font-size:10px">Cost: ${n.cost} × 7 = ${n.cost*7} days</span>` : '';
   const icon = n.gfxIcon ? `<br><span style="color:var(--text-dim);font-size:10px">${n.gfxIcon}</span>` : '';
-  const bad  = (n.prerequisite||[]).some(pid => state.nodes[pid] && state.nodes[pid].y >= n.y)
+  const typeLabel = n.focusType !== FOCUS_TYPE_NORMAL
+    ? `<br><span style="color:#6ab0e0;font-size:10px">${n.focusType}</span>` : '';
+  const bad  = (n.prerequisite_groups || []).some(g => g.some(pid => state.nodes[pid] && state.nodes[pid].y >= n.y))
     ? `<br><span style="color:#c05050;font-size:10px">⚠ Invalid prerequisite</span>` : '';
-  t.innerHTML = `<strong style="font-family:'Cinzel',serif;color:var(--gold);font-size:11px">${n.label}</strong><br><span style="color:var(--text-dim);font-size:10px">${n.id}</span>${icon}${days}${bad}`;
+  const label = getNodeLabel(n);
+  t.innerHTML = `<strong style="font-family:'Cinzel',serif;color:var(--gold);font-size:11px">${label}</strong><br><span style="color:var(--text-dim);font-size:10px">${n.id}</span>${typeLabel}${icon}${days}${bad}`;
   t.style.display = 'block';
   document.addEventListener('mousemove', _moveTooltip);
 }

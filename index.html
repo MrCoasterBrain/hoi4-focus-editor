@@ -51,8 +51,8 @@
     <h3>Focus Properties</h3>
 
     <div class="field-group">
-      <label class="field-label">Display Name</label>
-      <input class="field-input" id="ep-label" type="text" placeholder="Visible label..."
+      <label class="field-label">Display Name <span style="color:var(--text-dim);font-weight:400;font-family:'Crimson Text',serif;text-transform:none;letter-spacing:0;font-size:10px">(empty = use ID)</span></label>
+      <input class="field-input" id="ep-label" type="text" placeholder="Leave empty to use Focus ID…"
              oninput="updateNodeProp('label',this.value)">
     </div>
 
@@ -63,6 +63,15 @@
       <input class="field-input" id="ep-focus-id" type="text" placeholder="GER_focus_name"
              onblur="updateFocusId(this.value)">
       <span class="field-hint">Rename on blur — updates all references</span>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Focus Type</label>
+      <select class="field-input field-select" id="ep-focus-type" onchange="updateFocusType(this.value)">
+        <option value="focus">focus (normal)</option>
+        <option value="shared_focus">shared_focus</option>
+        <option value="joint_focus">joint_focus</option>
+      </select>
     </div>
 
     <div class="field-group">
@@ -101,18 +110,20 @@
       <div class="filter-wrap" id="filter-wrap"></div>
     </div>
 
-    <div class="panel-section-title">Relations</div>
-
-    <div class="field-group">
-      <label class="field-label">prerequisite</label>
-      <div id="ep-prereq-wrap"></div>
-      <span class="field-hint">Comma-separated IDs — type or pick from list</span>
+    <div class="panel-section-title">
+      Prerequisites
+      <span style="font-family:'Crimson Text',serif;font-size:10px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">
+        gold=AND · <span style="color:#6ab0e0">blue=OR</span>
+      </span>
     </div>
+    <div id="prereq-groups-container"></div>
+
+    <div class="panel-section-title">Relations</div>
 
     <div class="field-group">
       <label class="field-label">mutually_exclusive</label>
       <div id="ep-mutex-wrap"></div>
-      <span class="field-hint">Symmetric — also updates the other focus</span>
+      <span class="field-hint">Comma-separated · symmetric</span>
     </div>
 
     <div class="field-group">

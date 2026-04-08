@@ -24,12 +24,13 @@ function init() {
   state.nodes['GER_factory_expansion'].cost  = 5;
   state.nodes['GER_arms_manufacturing'].cost = 10;
 
-  state.nodes['GER_industrial_base'].prerequisite    = ['GER_national_unity'];
-  state.nodes['GER_civilian_industry'].prerequisite  = ['GER_industrial_base'];
-  state.nodes['GER_military_industry'].prerequisite  = ['GER_industrial_base'];
-  state.nodes['GER_steel_production'].prerequisite   = ['GER_civilian_industry'];
-  state.nodes['GER_factory_expansion'].prerequisite  = ['GER_civilian_industry'];
-  state.nodes['GER_arms_manufacturing'].prerequisite = ['GER_military_industry'];
+  // Use prerequisite_groups format
+  state.nodes['GER_industrial_base'].prerequisite_groups    = [['GER_national_unity']];
+  state.nodes['GER_civilian_industry'].prerequisite_groups  = [['GER_industrial_base']];
+  state.nodes['GER_military_industry'].prerequisite_groups  = [['GER_industrial_base']];
+  state.nodes['GER_steel_production'].prerequisite_groups   = [['GER_civilian_industry']];
+  state.nodes['GER_factory_expansion'].prerequisite_groups  = [['GER_civilian_industry']];
+  state.nodes['GER_arms_manufacturing'].prerequisite_groups = [['GER_military_industry']];
 
   state.nodes['GER_civilian_industry'].mutually_exclusive = ['GER_military_industry'];
   state.nodes['GER_military_industry'].mutually_exclusive = ['GER_civilian_industry'];

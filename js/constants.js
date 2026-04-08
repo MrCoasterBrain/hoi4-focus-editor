@@ -1,5 +1,5 @@
 // js/constants.js
-const GRID_SIZE = 60;   // half the previous 120px → twice as dense grid
+const GRID_SIZE = 60;
 
 const SEARCH_FILTERS = [
   'FOCUS_FILTER_MANPOWER','FOCUS_FILTER_INDUSTRY','FOCUS_FILTER_STABILITY',
@@ -8,3 +8,8 @@ const SEARCH_FILTERS = [
 ];
 
 const DEFAULT_ICON = 'GFX_goal_unknown';
+
+// Focus types
+const FOCUS_TYPE_NORMAL = 'focus';
+const FOCUS_TYPE_SHARED = 'shared_focus';
+const FOCUS_TYPE_JOINT  = 'joint_focus';

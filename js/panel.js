@@ -1,7 +1,6 @@
 // js/panel.js
 
 // ── Focus ID picker widget ────────────────────────────────────
-// Creates a combo: text input + dropdown button that shows all focus IDs
 function buildFocusPicker(inputId, onSelect) {
   const wrap = document.getElementById(inputId + '-wrap');
   if (!wrap) return;
@@ -31,15 +30,14 @@ function buildFocusPicker(inputId, onSelect) {
     e.preventDefault();
     const isOpen = dropdown.style.display !== 'none';
     closeAllFocusDropdowns();
-    if (!isOpen) openFocusDropdown(dropdown, input, onSelect);
+    if (!isOpen) _populateDropdown(dropdown, input, onSelect, '');
   });
 
   input.addEventListener('input', () => {
-    openFocusDropdown(dropdown, input, onSelect, input.value.toLowerCase());
+    _populateDropdown(dropdown, input, onSelect, input.value.toLowerCase());
   });
-
   input.addEventListener('focus', () => {
-    openFocusDropdown(dropdown, input, onSelect, input.value.toLowerCase());
+    _populateDropdown(dropdown, input, onSelect, input.value.toLowerCase());
   });
 
   row.appendChild(input);
@@ -48,7 +46,7 @@ function buildFocusPicker(inputId, onSelect) {
   wrap.appendChild(dropdown);
 }
 
-function openFocusDropdown(dropdown, input, onSelect, filter) {
+function _populateDropdown(dropdown, input, onSelect, filter) {
   closeAllFocusDropdowns();
   const ids = Object.keys(state.nodes).sort();
   const filtered = filter
@@ -58,15 +56,12 @@ function openFocusDropdown(dropdown, input, onSelect, filter) {
   if (filtered.length === 0) { dropdown.style.display = 'none'; return; }
 
   dropdown.innerHTML = '';
-  // Clear option
+
   const clearItem = document.createElement('div');
   clearItem.className = 'focus-picker-item focus-picker-clear';
   clearItem.textContent = '— clear —';
   clearItem.addEventListener('mousedown', e => {
-    e.preventDefault();
-    input.value = '';
-    onSelect('');
-    closeAllFocusDropdowns();
+    e.preventDefault(); input.value = ''; onSelect(''); closeAllFocusDropdowns();
   });
   dropdown.appendChild(clearItem);
 
@@ -78,10 +73,7 @@ function openFocusDropdown(dropdown, input, onSelect, filter) {
       : `<span class="fpi-id">${id}</span>`;
     item.innerHTML = lbl;
     item.addEventListener('mousedown', e => {
-      e.preventDefault();
-      input.value = id;
-      onSelect(id);
-      closeAllFocusDropdowns();
+      e.preventDefault(); input.value = id; onSelect(id); closeAllFocusDropdowns();
     });
     dropdown.appendChild(item);
   });
@@ -94,27 +86,17 @@ function openFocusDropdown(dropdown, input, onSelect, filter) {
   }
 
   dropdown.style.display = 'block';
-  dropdown._input = input;
 }
 
 function closeAllFocusDropdowns() {
-  document.querySelectorAll('.focus-picker-dropdown').forEach(d => {
-    d.style.display = 'none';
-  });
+  document.querySelectorAll('.focus-picker-dropdown').forEach(d => { d.style.display = 'none'; });
 }
 
-// Close dropdowns on outside click
 document.addEventListener('mousedown', e => {
   if (!e.target.closest('.focus-picker-row') && !e.target.closest('.focus-picker-dropdown')) {
     closeAllFocusDropdowns();
   }
 });
-
-// Refresh all picker inputs when panel is shown
-function refreshAllFocusPickers() {
-  // Close any open dropdowns so stale data doesn't show
-  closeAllFocusDropdowns();
-}
 
 // ── Panel router ──────────────────────────────────────────────
 function openFocusPanel(id) {
@@ -142,30 +124,142 @@ function closePanel() {
   deselectAll();
 }
 
-// ── Focus panel ───────────────────────────────────────────────
-function initFocusPanelPickers() {
-  // prerequisite picker (comma-separated, so we just set the first pick;
-  // user can still type manually for multiple)
-  buildFocusPicker('ep-prereq', val => {
-    if (!state.selectedId) return;
-    const cur = document.getElementById('ep-prereq').value;
-    // append if there's already content
-    const existing = cur.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-    if (val === '') {
-      document.getElementById('ep-prereq').value = '';
-    } else if (!existing.includes(val)) {
-      document.getElementById('ep-prereq').value = existing.concat(val).join(', ');
-    }
-    updateRelationProp('prerequisite', document.getElementById('ep-prereq').value);
+// ── Prerequisite groups UI ────────────────────────────────────
+function renderPrereqGroups(nodeId) {
+  const container = document.getElementById('prereq-groups-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const n = state.nodes[nodeId];
+  const groups = n.prerequisite_groups || [];
+
+  groups.forEach((group, gi) => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'prereq-group';
+
+    const header = document.createElement('div');
+    header.className = 'prereq-group-header';
+
+    const label = document.createElement('span');
+    label.className = 'prereq-group-label';
+    label.textContent = group.length > 1 ? `OR-group ${gi + 1}` : `AND ${gi + 1}`;
+
+    const modeBtn = document.createElement('button');
+    modeBtn.className = 'prereq-mode-btn';
+    modeBtn.title = group.length > 1 ? 'Switch to AND (split into separate)' : 'Add another ID to make it OR';
+    modeBtn.textContent = group.length > 1 ? 'OR' : 'AND';
+    modeBtn.style.color = group.length > 1 ? '#6ab0e0' : 'var(--gold-dim)';
+
+    const delGroupBtn = document.createElement('button');
+    delGroupBtn.className = 'prereq-del-group-btn';
+    delGroupBtn.textContent = '✕';
+    delGroupBtn.title = 'Remove this prerequisite';
+    delGroupBtn.addEventListener('click', () => {
+      n.prerequisite_groups.splice(gi, 1);
+      renderPrereqGroups(nodeId);
+      renderAll(); selectNode(nodeId);
+    });
+
+    header.appendChild(label);
+    header.appendChild(modeBtn);
+    header.appendChild(delGroupBtn);
+    groupEl.appendChild(header);
+
+    // Entries in this group
+    group.forEach((pid, idx) => {
+      const entryEl = document.createElement('div');
+      entryEl.className = 'prereq-entry';
+
+      const inputId = `prereq-g${gi}-i${idx}`;
+      const entryWrap = document.createElement('div');
+      entryWrap.id = inputId + '-wrap';
+      entryWrap.className = 'prereq-entry-picker';
+
+      entryEl.appendChild(entryWrap);
+
+      // Del button for single entry
+      if (group.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'prereq-del-entry-btn';
+        delBtn.textContent = '−';
+        delBtn.title = 'Remove from OR-group';
+        delBtn.addEventListener('click', () => {
+          group.splice(idx, 1);
+          if (group.length === 0) n.prerequisite_groups.splice(gi, 1);
+          renderPrereqGroups(nodeId);
+          renderAll(); selectNode(nodeId);
+        });
+        entryEl.appendChild(delBtn);
+      }
+
+      groupEl.appendChild(entryEl);
+
+      // Build picker inside entry wrap
+      buildFocusPicker(inputId, val => {
+        if (!val) return;
+        group[idx] = val;
+        renderPrereqGroups(nodeId);
+        renderAll(); selectNode(nodeId);
+      });
+
+      const inp = document.getElementById(inputId);
+      if (inp) {
+        inp.value = pid;
+        inp.addEventListener('blur', () => {
+          const v = inp.value.trim();
+          if (v) { group[idx] = v; renderAll(); selectNode(nodeId); }
+        });
+      }
+    });
+
+    // Add OR entry button
+    const addOrBtn = document.createElement('button');
+    addOrBtn.className = 'prereq-add-or-btn';
+    addOrBtn.textContent = '+ Add OR';
+    addOrBtn.title = 'Add another focus ID to this OR-group';
+    addOrBtn.addEventListener('click', () => {
+      group.push('');
+      renderPrereqGroups(nodeId);
+    });
+    groupEl.appendChild(addOrBtn);
+
+    container.appendChild(groupEl);
+
+    // Update mode btn after DOM is built
+    modeBtn.addEventListener('click', () => {
+      if (group.length > 1) {
+        // Split OR into separate AND groups
+        const newGroups = group.map(id => [id]);
+        n.prerequisite_groups.splice(gi, 1, ...newGroups);
+      } else {
+        // Just add another entry to make it OR
+        group.push('');
+      }
+      renderPrereqGroups(nodeId);
+      renderAll(); selectNode(nodeId);
+    });
   });
 
+  // Add new AND prerequisite button
+  const addAndBtn = document.createElement('button');
+  addAndBtn.className = 'prereq-add-and-btn';
+  addAndBtn.textContent = '+ Add prerequisite (AND)';
+  addAndBtn.addEventListener('click', () => {
+    if (!n.prerequisite_groups) n.prerequisite_groups = [];
+    n.prerequisite_groups.push(['']);
+    renderPrereqGroups(nodeId);
+  });
+  container.appendChild(addAndBtn);
+}
+
+// ── Panel init ────────────────────────────────────────────────
+function initFocusPanelPickers() {
   buildFocusPicker('ep-mutex', val => {
-    if (!state.selectedId) return;
+    if (!state.selectedId || !val) return;
+    const n = state.nodes[state.selectedId];
     const cur = document.getElementById('ep-mutex').value;
     const existing = cur.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-    if (val === '') {
-      document.getElementById('ep-mutex').value = '';
-    } else if (!existing.includes(val)) {
+    if (!existing.includes(val)) {
       document.getElementById('ep-mutex').value = existing.concat(val).join(', ');
     }
     updateRelationProp('mutually_exclusive', document.getElementById('ep-mutex').value);
@@ -177,23 +271,25 @@ function initFocusPanelPickers() {
     updateRelativePositionId(val);
   });
 
-  // Tree panel picker
   buildFocusPicker('tp-initial-focus', val => {
     document.getElementById('tp-initial-focus').value = val;
     updateTreeMeta('initialShowFocus', val);
   });
 }
 
+// ── Focus panel ───────────────────────────────────────────────
 function refreshFocusPanel(id) {
   const n = state.nodes[id]; if (!n) return;
-  document.getElementById('ep-label').value    = n.label;
+
+  document.getElementById('ep-label').value    = n.label || '';
   document.getElementById('ep-focus-id').value = n.id;
   document.getElementById('ep-gfx').value      = n.gfxIcon || '';
   document.getElementById('ep-cost').value     = n.cost;
   document.getElementById('ep-cost-days').textContent = (n.cost || 0) * 7 + ' days';
 
-  const prereqEl = document.getElementById('ep-prereq');
-  if (prereqEl) prereqEl.value = (n.prerequisite || []).join(', ');
+  // Focus type selector
+  const typeEl = document.getElementById('ep-focus-type');
+  if (typeEl) typeEl.value = n.focusType || FOCUS_TYPE_NORMAL;
 
   const mutexEl = document.getElementById('ep-mutex');
   if (mutexEl) mutexEl.value = (n.mutually_exclusive || []).join(', ');
@@ -210,6 +306,7 @@ function refreshFocusPanel(id) {
     b.classList.toggle('active-filter', (n.search_filters || []).includes(b.dataset.f)));
 
   refreshIconPicker(n.gfxIcon);
+  renderPrereqGroups(id);
   closeAllFocusDropdowns();
 }
 
@@ -227,12 +324,16 @@ function updateNodeProp(key, val) {
   renderAll(); selectNode(state.selectedId);
 }
 
+function updateFocusType(val) {
+  if (!state.selectedId || !state.nodes[state.selectedId]) return;
+  state.nodes[state.selectedId].focusType = val;
+  renderAll(); selectNode(state.selectedId);
+}
+
 function updateRelativePositionId(rawVal) {
   if (!state.selectedId || !state.nodes[state.selectedId]) return;
   const val = (rawVal || '').trim();
-  if (val && !state.nodes[val]) {
-    AppConsole.warn(`relative_position_id: focus "${val}" not found`);
-  }
+  if (val && !state.nodes[val]) AppConsole.warn(`relative_position_id: focus "${val}" not found`);
   state.nodes[state.selectedId].relative_position_id = val;
   renderAll(); selectNode(state.selectedId);
 }
@@ -255,11 +356,6 @@ function updateRelationProp(key, rawVal) {
       const other = state.nodes[eid];
       if (other && !other.mutually_exclusive.includes(n.id)) other.mutually_exclusive.push(n.id);
     });
-  } else {
-    const valid   = newIds.filter(id => state.nodes[id]);
-    const invalid = newIds.filter(id => id && !state.nodes[id]);
-    if (invalid.length) AppConsole.warn(`prerequisite: unknown IDs: ${invalid.join(', ')}`);
-    n[key] = valid;
   }
 
   renderAll(); selectNode(state.selectedId);
@@ -280,7 +376,6 @@ function buildIconPicker() {
   const input = document.getElementById('ep-icon-search');
   const grid  = document.getElementById('ep-icon-grid');
   if (!input || !grid) return;
-
   input.addEventListener('input', () => {
     clearTimeout(_iconFilterTimeout);
     _iconFilterTimeout = setTimeout(() => renderIconGrid(input.value.trim().toLowerCase()), 150);
@@ -292,40 +387,29 @@ function renderIconGrid(filter) {
   const grid = document.getElementById('ep-icon-grid');
   if (!grid) return;
   grid.innerHTML = '';
-
   const keys = Object.keys(SPRITE_MAP);
   const focusKeys = keys.filter(k =>
     (k.startsWith('GFX_focus_') || k.startsWith('GFX_goal_')) &&
-    !k.includes('fast_overlay') &&
-    !k.includes('shine_test')
+    !k.includes('fast_overlay') && !k.includes('shine_test')
   );
-
   const filtered = filter ? focusKeys.filter(k => k.toLowerCase().includes(filter)) : focusKeys;
   const shown = filtered.slice(0, 120);
-
   shown.forEach(gfxName => {
     const btn = document.createElement('div');
-    btn.className = 'icon-btn';
-    btn.title = gfxName;
-    btn.dataset.gfx = gfxName;
-
+    btn.className = 'icon-btn'; btn.title = gfxName; btn.dataset.gfx = gfxName;
     const imgSrc = SPRITE_MAP[gfxName];
     if (imgSrc) {
       const img = document.createElement('img');
       img.src = imgSrc; img.alt = gfxName; img.draggable = false;
-      img.onerror = () => { img.style.display = 'none'; btn.textContent = '?'; };
+      img.onerror = () => { img.style.display='none'; btn.textContent='?'; };
       btn.appendChild(img);
-    } else {
-      btn.textContent = '?';
-    }
-
+    } else { btn.textContent = '?'; }
     btn.onclick = () => {
       updateNodeProp('gfxIcon', gfxName);
       document.getElementById('ep-gfx').value = gfxName;
     };
     grid.appendChild(btn);
   });
-
   if (filtered.length > 120) {
     const info = document.createElement('div');
     info.style.cssText = 'grid-column:1/-1;font-size:10px;color:var(--text-dim);padding:4px;text-align:center;font-family:Cinzel,serif';
@@ -341,12 +425,12 @@ function refreshIconPicker(currentGfx) {
 
 // ── Tree panel ────────────────────────────────────────────────
 function refreshTreePanel() {
-  document.getElementById('tp-tree-id').value     = state.treeMeta.treeId;
-  document.getElementById('tp-country').value     = state.treeMeta.countryBlock || '';
+  document.getElementById('tp-tree-id').value = state.treeMeta.treeId;
+  document.getElementById('tp-country').value = state.treeMeta.countryBlock || '';
   const initEl = document.getElementById('tp-initial-focus');
   if (initEl) initEl.value = state.treeMeta.initialShowFocus || '';
-  document.getElementById('tp-cf-x').value        = state.treeMeta.cfX;
-  document.getElementById('tp-cf-y').value        = state.treeMeta.cfY;
+  document.getElementById('tp-cf-x').value = state.treeMeta.cfX;
+  document.getElementById('tp-cf-y').value = state.treeMeta.cfY;
   closeAllFocusDropdowns();
 }
 
@@ -371,18 +455,12 @@ function showCtxMenu(x, y) {
   m.style.left = Math.min(x, window.innerWidth  - 210) + 'px';
   m.style.top  = Math.min(y, window.innerHeight - 100) + 'px';
   _ctxMenuOpen = true;
-
-  // setTimeout so this mousedown event doesn't immediately close the menu
-  setTimeout(() => {
-    document.addEventListener('mousedown', _onOutsideCtxClick);
-  }, 0);
+  setTimeout(() => { document.addEventListener('mousedown', _onOutsideCtxClick); }, 0);
 }
 
 function _onOutsideCtxClick(e) {
   const m = document.getElementById('ctx-menu');
-  if (m && !m.contains(e.target)) {
-    closeCtxMenu();
-  }
+  if (m && !m.contains(e.target)) closeCtxMenu();
 }
 
 function closeCtxMenu() {

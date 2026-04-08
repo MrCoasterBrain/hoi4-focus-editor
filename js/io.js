@@ -15,6 +15,7 @@ function importJSON() {
       const d = JSON.parse(text);
       state.nodes    = d.nodes    || {};
       state.treeMeta = { ...state.treeMeta, ...(d.treeMeta || {}) };
+      migrateAllNodes();
       state.selectedId = null;
       closePanel(); renderAll();
       AppConsole.log('Imported JSON: ' + Object.keys(state.nodes).length + ' focuses.');
@@ -27,56 +28,98 @@ function exportHoI4() {
   try {
     const m = state.treeMeta;
     const T = '    ';
-    let out = 'focus_tree = {\n';
-    out += T + 'id = ' + m.treeId + '\n';
-    if (m.countryBlock && m.countryBlock.trim()) {
-      out += T + 'country = {\n';
-      m.countryBlock.split('\n').forEach(line => { out += T + T + line.trim() + '\n'; });
-      out += T + '}\n';
-    }
-    if (m.mtth && m.mtth.trim()) {
-      out += T + 'mean_time_to_happen = {\n';
-      m.mtth.split('\n').forEach(line => { out += T + T + line.trim() + '\n'; });
-      out += T + '}\n';
-    }
-    out += T + 'continuous_focus_position = { x = ' + m.cfX + ' y = ' + m.cfY + ' }\n';
-    if (m.initialShowFocus) out += T + 'initial_show_position = { focus = ' + m.initialShowFocus + ' }\n';
-    out += '\n';
+    let out = '';
 
-    Object.values(state.nodes).forEach(n => {
-      const hx = Math.round(n.x / GRID_SIZE);
-      const hy = Math.round(n.y / (GRID_SIZE * 2));
-      out += T + 'focus = {\n';
-      out += T+T + 'id = ' + n.id + '\n';
-      // Use relative_position_id if set, otherwise use absolute x/y
-      if (n.relative_position_id && state.nodes[n.relative_position_id]) {
-        const rel = state.nodes[n.relative_position_id];
-        const dx = Math.round((n.x - rel.x) / GRID_SIZE);
-        const dy = Math.round((n.y - rel.y) / (GRID_SIZE * 2));
-        out += T+T + 'x = ' + dx + '\n';
-        out += T+T + 'y = ' + dy + '\n';
-        out += T+T + 'relative_position_id = ' + n.relative_position_id + '\n';
-      } else {
-        out += T+T + 'x = ' + hx + '\n';
-        out += T+T + 'y = ' + hy + '\n';
+    // ── Localisation comment for custom labels ──
+    const customLabels = Object.values(state.nodes).filter(n => hasCustomLabel(n));
+    if (customLabels.length > 0) {
+      out += '# l_russian:\n';
+      customLabels.forEach(n => {
+        out += `#  ${n.id}: "${n.label}"\n`;
+      });
+      out += '\n';
+    }
+
+    // Group nodes by focusType
+    const normalNodes = Object.values(state.nodes).filter(n => (n.focusType || FOCUS_TYPE_NORMAL) === FOCUS_TYPE_NORMAL);
+    const sharedNodes = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_SHARED);
+    const jointNodes  = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_JOINT);
+
+    // ── focus_tree block (normal + joint) ──
+    if (normalNodes.length > 0 || jointNodes.length > 0) {
+      out += 'focus_tree = {\n';
+      out += T + 'id = ' + m.treeId + '\n';
+      if (m.countryBlock && m.countryBlock.trim()) {
+        out += T + 'country = {\n';
+        m.countryBlock.split('\n').forEach(line => { out += T + T + line.trim() + '\n'; });
+        out += T + '}\n';
       }
-      out += T+T + 'icon = ' + (n.gfxIcon || DEFAULT_ICON) + '\n';
-      out += T+T + 'cost = ' + n.cost + '\n';
-      if (n.search_filters && n.search_filters.length)
-        out += T+T + 'search_filters = { ' + n.search_filters.join(' ') + ' }\n';
-      (n.prerequisite       || []).forEach(pid => { out += T+T + 'prerequisite = { focus = ' + pid + ' }\n'; });
-      (n.mutually_exclusive || []).forEach(eid => { out += T+T + 'mutually_exclusive = { focus = ' + eid + ' }\n'; });
-      if (n.available)         out += T+T + 'available = {\n' + T+T+T + n.available.trim() + '\n' + T+T + '}\n';
-      if (n.bypass)            out += T+T + 'bypass = {\n' + T+T+T + n.bypass.trim() + '\n' + T+T + '}\n';
-      if (n.cancel_if_invalid) out += T+T + 'cancel_if_invalid = yes\n';
-      if (n.completion_reward) out += T+T + 'completion_reward = {\n' + T+T+T + n.completion_reward.trim() + '\n' + T+T + '}\n';
-      out += T + '}\n\n';
-    });
-    out += '}\n';
+      out += T + 'continuous_focus_position = { x = ' + m.cfX + ' y = ' + m.cfY + ' }\n';
+      if (m.initialShowFocus) out += T + 'initial_show_position = { focus = ' + m.initialShowFocus + ' }\n';
+      out += '\n';
+
+      normalNodes.forEach(n => { out += _serializeFocus(n, T, 'focus'); });
+      jointNodes.forEach(n  => { out += _serializeFocus(n, T, 'joint_focus'); });
+
+      out += '}\n\n';
+    }
+
+    // ── shared_focus blocks (top-level, outside focus_tree) ──
+    sharedNodes.forEach(n => { out += _serializeFocus(n, '', 'shared_focus'); });
 
     _download(out, 'focus_tree.txt', 'text/plain');
     AppConsole.log('Exported HoI4 .txt.');
   } catch(e) { AppConsole.error('Export HoI4: ' + e.message); }
+}
+
+function _serializeFocus(n, indent, keyword) {
+  const T = '    ';
+  const I = indent;
+  const II = indent + T;
+  let out = '';
+
+  const hx = Math.round(n.x / GRID_SIZE);
+  const hy = Math.round(n.y / (GRID_SIZE * 2));
+
+  out += I + keyword + ' = {\n';
+  out += II + 'id = ' + n.id + '\n';
+
+  if (n.relative_position_id && state.nodes[n.relative_position_id]) {
+    const rel = state.nodes[n.relative_position_id];
+    const dx = Math.round((n.x - rel.x) / GRID_SIZE);
+    const dy = Math.round((n.y - rel.y) / (GRID_SIZE * 2));
+    out += II + 'x = ' + dx + '\n';
+    out += II + 'y = ' + dy + '\n';
+    out += II + 'relative_position_id = ' + n.relative_position_id + '\n';
+  } else {
+    out += II + 'x = ' + hx + '\n';
+    out += II + 'y = ' + hy + '\n';
+  }
+
+  if (n.gfxIcon && n.gfxIcon !== DEFAULT_ICON) out += II + 'icon = ' + n.gfxIcon + '\n';
+  out += II + 'cost = ' + n.cost + '\n';
+
+  if (n.search_filters && n.search_filters.length)
+    out += II + 'search_filters = { ' + n.search_filters.join(' ') + ' }\n';
+
+  // prerequisite_groups: each group is one prerequisite = { } block
+  (n.prerequisite_groups || []).forEach(group => {
+    out += II + 'prerequisite = {';
+    group.forEach(pid => { out += ' focus = ' + pid; });
+    out += ' }\n';
+  });
+
+  (n.mutually_exclusive || []).forEach(eid => {
+    out += II + 'mutually_exclusive = { focus = ' + eid + ' }\n';
+  });
+
+  if (n.available)         out += II + 'available = {\n' + II + T + n.available.trim() + '\n' + II + '}\n';
+  if (n.bypass)            out += II + 'bypass = {\n'    + II + T + n.bypass.trim()    + '\n' + II + '}\n';
+  if (n.cancel_if_invalid) out += II + 'cancel_if_invalid = yes\n';
+  if (n.completion_reward) out += II + 'completion_reward = {\n' + II + T + n.completion_reward.trim() + '\n' + II + '}\n';
+
+  out += I + '}\n\n';
+  return out;
 }
 
 // ── HoI4 .txt import ─────────────────────────────────────────
@@ -99,118 +142,137 @@ function parseHoI4FocusTree(text) {
   var src    = text.replace(/#[^\n]*/g, '');
   var tokens = tokeniseClausewitz(src);
   var outerBlock = parseBlock(tokens, 0).block;
-  // Unwrap focus_tree = { ... } wrapper if present
-  var root;
-  if (outerBlock.length === 1 && outerBlock[0].key === 'focus_tree' && outerBlock[0].block) {
-    root = outerBlock[0].block;
-    AppConsole.log('Unwrapped focus_tree block.');
-  } else {
-    root = outerBlock;
-  }
 
   var treeMeta = {
-    treeId: '', countryBlock: '', mtth: '',
-    initialShowFocus: '', cfX: 100, cfY: 1230,
+    treeId: '', countryBlock: '', initialShowFocus: '', cfX: 100, cfY: 1230,
   };
   var nodes = {};
-  // Store raw relative positioning info for second pass
-  var rawFocuses = []; // { id, relId, rawX, rawY }
+  var rawFocuses = [];
 
+  // Process top-level items
+  outerBlock.forEach(function(item) {
+    if (!item || item.type !== 'assign') return;
+
+    if (item.key === 'focus_tree') {
+      // Process focus_tree block
+      _parseFocusTreeBlock(item.block || [], treeMeta, nodes, rawFocuses, FOCUS_TYPE_NORMAL);
+
+    } else if (item.key === 'shared_focus') {
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+
+    } else if (item.key === 'joint_focus') {
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+
+    } else if (item.key === 'focus') {
+      // top-level focus without focus_tree wrapper
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_NORMAL);
+    }
+  });
+
+  _resolveRelativePositions(nodes, rawFocuses);
+
+  var cnt = Object.keys(nodes).length;
+  AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
+  if (cnt === 0) AppConsole.warn('No focuses found — check file format.');
+  return { nodes: nodes, treeMeta: treeMeta };
+}
+
+function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType) {
   root.forEach(function(item) {
     if (!item || item.type !== 'assign') return;
 
     if (item.key === 'id') {
       treeMeta.treeId = item.value;
-
     } else if (item.key === 'country') {
       treeMeta.countryBlock = blockToRaw(item.block || [], '');
-
-    } else if (item.key === 'mean_time_to_happen') {
-      treeMeta.mtth = blockToRaw(item.block || [], '');
-
     } else if (item.key === 'continuous_focus_position') {
       var blk = item.block || [];
       var xIt = blk.find(function(b){ return b.key === 'x'; });
       var yIt = blk.find(function(b){ return b.key === 'y'; });
       if (xIt) treeMeta.cfX = parseFloat(xIt.value) || 100;
       if (yIt) treeMeta.cfY = parseFloat(yIt.value) || 1230;
-
     } else if (item.key === 'initial_show_position') {
       var fIt = (item.block || []).find(function(b){ return b.key === 'focus'; });
       if (fIt) treeMeta.initialShowFocus = fIt.value;
-
     } else if (item.key === 'focus') {
-      var blk = item.block || [];
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, defaultType);
+    } else if (item.key === 'joint_focus') {
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+    } else if (item.key === 'shared_focus') {
+      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+    }
+  });
+}
 
-      function gv(k) {
-        var it = blk.find(function(b){ return b.key === k; });
-        return it ? it.value : '';
-      }
+function _parseSingleFocus(blk, nodes, rawFocuses, focusType) {
+  function gv(k) {
+    var it = blk.find(function(b){ return b.key === k; });
+    return it ? it.value : '';
+  }
 
-      var fid = gv('id');
-      if (!fid) { AppConsole.warn('Focus block with no id — skipped'); return; }
+  var fid = gv('id');
+  if (!fid) { AppConsole.warn('Focus block with no id — skipped'); return; }
 
-      var rawX = parseFloat(gv('x')) || 0;
-      var rawY = parseFloat(gv('y')) || 0;
-      var relId = gv('relative_position_id') || '';
+  var rawX = parseFloat(gv('x')) || 0;
+  var rawY = parseFloat(gv('y')) || 0;
+  var relId = gv('relative_position_id') || '';
 
-      var node = {
-        id:                   fid,
-        x:                    snap(Math.round(rawX * GRID_SIZE)),
-        y:                    snap(rawY * GRID_SIZE * 2),
-        label:                fid,
-        gfxIcon:              gv('icon') || DEFAULT_ICON,
-        cost:                 parseFloat(gv('cost')) || 10,
-        search_filters:       [],
-        prerequisite:         [],
-        mutually_exclusive:   [],
-        relative_position_id: relId,
-        completion_reward:    '',
-        available:            '',
-        bypass:               '',
-        cancel_if_invalid:    false,
-      };
+  var node = {
+    id:                   fid,
+    focusType:            focusType,
+    x:                    snap(Math.round(rawX * GRID_SIZE)),
+    y:                    snap(rawY * GRID_SIZE * 2),
+    label:                '',
+    gfxIcon:              gv('icon') || DEFAULT_ICON,
+    cost:                 parseFloat(gv('cost')) || 10,
+    search_filters:       [],
+    prerequisite_groups:  [],
+    mutually_exclusive:   [],
+    relative_position_id: relId,
+    completion_reward:    '',
+    available:            '',
+    bypass:               '',
+    cancel_if_invalid:    false,
+  };
 
-      blk.forEach(function(it) {
-        if (it.type !== 'assign') return;
+  blk.forEach(function(it) {
+    if (it.type !== 'assign') return;
 
-        if (it.key === 'prerequisite') {
-          var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
-          focusItems.forEach(function(f) {
-            if (f.value && node.prerequisite.indexOf(f.value) === -1)
-              node.prerequisite.push(f.value);
-          });
+    if (it.key === 'prerequisite') {
+      // Each prerequisite block = one group; multiple focus = entries within = OR
+      var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
+      var group = focusItems.map(function(f){ return f.value; }).filter(Boolean);
+      if (group.length > 0) node.prerequisite_groups.push(group);
 
-        } else if (it.key === 'mutually_exclusive') {
-          var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
-          focusItems.forEach(function(f) {
-            if (f.value && node.mutually_exclusive.indexOf(f.value) === -1)
-              node.mutually_exclusive.push(f.value);
-          });
-
-        } else if (it.key === 'search_filters') {
-          (it.block || []).forEach(function(t) {
-            if (t.type === 'value' && node.search_filters.indexOf(t.value) === -1)
-              node.search_filters.push(t.value);
-          });
-
-        } else if (it.key === 'completion_reward') {
-          node.completion_reward = blockToRaw(it.block || [], '');
-        } else if (it.key === 'available') {
-          node.available = blockToRaw(it.block || [], '');
-        } else if (it.key === 'bypass') {
-          node.bypass = blockToRaw(it.block || [], '');
-        } else if (it.key === 'cancel_if_invalid') {
-          node.cancel_if_invalid = it.value === 'yes';
-        }
+    } else if (it.key === 'mutually_exclusive') {
+      var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
+      focusItems.forEach(function(f) {
+        if (f.value && node.mutually_exclusive.indexOf(f.value) === -1)
+          node.mutually_exclusive.push(f.value);
       });
 
-      nodes[fid] = node;
-      rawFocuses.push({ id: fid, relId: relId, rawX: rawX, rawY: rawY });
+    } else if (it.key === 'search_filters') {
+      (it.block || []).forEach(function(t) {
+        if (t.type === 'value' && node.search_filters.indexOf(t.value) === -1)
+          node.search_filters.push(t.value);
+      });
+
+    } else if (it.key === 'completion_reward') {
+      node.completion_reward = blockToRaw(it.block || [], '');
+    } else if (it.key === 'available') {
+      node.available = blockToRaw(it.block || [], '');
+    } else if (it.key === 'bypass') {
+      node.bypass = blockToRaw(it.block || [], '');
+    } else if (it.key === 'cancel_if_invalid') {
+      node.cancel_if_invalid = it.value === 'yes';
     }
   });
 
-  // Second pass: resolve relative_position_id
+  nodes[fid] = node;
+  rawFocuses.push({ id: fid, relId: relId, rawX: rawX, rawY: rawY });
+}
+
+function _resolveRelativePositions(nodes, rawFocuses) {
   var maxPasses = 30;
   var unresolved = rawFocuses.filter(function(r){ return r.relId; });
 
@@ -221,12 +283,12 @@ function parseHoI4FocusTree(text) {
     unresolved.forEach(function(r) {
       var parent = nodes[r.relId];
       if (!parent) {
-        AppConsole.warn('relative_position_id "' + r.relId + '" not found for "' + r.id + '" — using absolute coords');
+        AppConsole.warn('relative_position_id "' + r.relId + '" not found for "' + r.id + '"');
         progressMade = true;
         return;
       }
       var parentEntry = rawFocuses.find(function(p){ return p.id === r.relId && p.relId; });
-      if (parentEntry && stillUnresolved.indexOf(parentEntry) !== -1) {
+      if (parentEntry && stillUnresolved.find(function(u){ return u.id === parentEntry.id; })) {
         stillUnresolved.push(r);
         return;
       }
@@ -239,14 +301,8 @@ function parseHoI4FocusTree(text) {
     unresolved = stillUnresolved;
   }
 
-  if (unresolved.length > 0) {
+  if (unresolved.length > 0)
     AppConsole.warn(unresolved.length + ' focuses could not resolve relative_position_id');
-  }
-
-  var cnt = Object.keys(nodes).length;
-  AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
-  if (cnt === 0) AppConsole.warn('No focuses found — check file format.');
-  return { nodes: nodes, treeMeta: treeMeta };
 }
 
 // ── Clausewitz tokeniser ──────────────────────────────────────
