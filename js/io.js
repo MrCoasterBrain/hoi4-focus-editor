@@ -48,8 +48,18 @@ function exportHoI4() {
       const hy = Math.round(n.y / (GRID_SIZE * 2));
       out += T + 'focus = {\n';
       out += T+T + 'id = ' + n.id + '\n';
-      out += T+T + 'x = ' + hx + '\n';
-      out += T+T + 'y = ' + hy + '\n';
+      // Use relative_position_id if set, otherwise use absolute x/y
+      if (n.relative_position_id && state.nodes[n.relative_position_id]) {
+        const rel = state.nodes[n.relative_position_id];
+        const dx = Math.round((n.x - rel.x) / GRID_SIZE);
+        const dy = Math.round((n.y - rel.y) / (GRID_SIZE * 2));
+        out += T+T + 'x = ' + dx + '\n';
+        out += T+T + 'y = ' + dy + '\n';
+        out += T+T + 'relative_position_id = ' + n.relative_position_id + '\n';
+      } else {
+        out += T+T + 'x = ' + hx + '\n';
+        out += T+T + 'y = ' + hy + '\n';
+      }
       out += T+T + 'icon = ' + (n.gfxIcon || DEFAULT_ICON) + '\n';
       out += T+T + 'cost = ' + n.cost + '\n';
       if (n.search_filters && n.search_filters.length)
@@ -122,7 +132,6 @@ function parseHoI4FocusTree(text) {
       var blk = item.block || [];
       var xIt = blk.find(function(b){ return b.key === 'x'; });
       var yIt = blk.find(function(b){ return b.key === 'y'; });
-      // Values are already pixels
       if (xIt) treeMeta.cfX = parseFloat(xIt.value) || 100;
       if (yIt) treeMeta.cfY = parseFloat(yIt.value) || 1230;
 
@@ -133,7 +142,6 @@ function parseHoI4FocusTree(text) {
     } else if (item.key === 'focus') {
       var blk = item.block || [];
 
-      // Get first value for a simple key
       function gv(k) {
         var it = blk.find(function(b){ return b.key === k; });
         return it ? it.value : '';
@@ -147,28 +155,26 @@ function parseHoI4FocusTree(text) {
       var relId = gv('relative_position_id') || '';
 
       var node = {
-        id:                 fid,
-        // Initial coords from x/y — will be adjusted in second pass if relId exists
-        x:                  snap(Math.round(rawX * GRID_SIZE)),
-        y:                  snap(rawY * GRID_SIZE * 2),
-        label:              fid,
-        gfxIcon:            gv('icon') || DEFAULT_ICON,
-        cost:               parseFloat(gv('cost')) || 10,
-        search_filters:     [],
-        prerequisite:       [],
-        mutually_exclusive: [],
-        completion_reward:  '',
-        available:          '',
-        bypass:             '',
-        cancel_if_invalid:  false,
+        id:                   fid,
+        x:                    snap(Math.round(rawX * GRID_SIZE)),
+        y:                    snap(rawY * GRID_SIZE * 2),
+        label:                fid,
+        gfxIcon:              gv('icon') || DEFAULT_ICON,
+        cost:                 parseFloat(gv('cost')) || 10,
+        search_filters:       [],
+        prerequisite:         [],
+        mutually_exclusive:   [],
+        relative_position_id: relId,
+        completion_reward:    '',
+        available:            '',
+        bypass:               '',
+        cancel_if_invalid:    false,
       };
 
-      // Iterate all items in focus block
       blk.forEach(function(it) {
         if (it.type !== 'assign') return;
 
         if (it.key === 'prerequisite') {
-          // Each prerequisite block can have multiple focus = entries (OR-group)
           var focusItems = (it.block || []).filter(function(b){ return b.key === 'focus'; });
           focusItems.forEach(function(f) {
             if (f.value && node.prerequisite.indexOf(f.value) === -1)
@@ -205,7 +211,6 @@ function parseHoI4FocusTree(text) {
   });
 
   // Second pass: resolve relative_position_id
-  // Repeat until all resolved or no progress (handles chains of relative positions)
   var maxPasses = 30;
   var unresolved = rawFocuses.filter(function(r){ return r.relId; });
 
@@ -217,17 +222,14 @@ function parseHoI4FocusTree(text) {
       var parent = nodes[r.relId];
       if (!parent) {
         AppConsole.warn('relative_position_id "' + r.relId + '" not found for "' + r.id + '" — using absolute coords');
-        progressMade = true; // drop it
+        progressMade = true;
         return;
       }
-      // Check if parent still has a pending relative resolve
       var parentEntry = rawFocuses.find(function(p){ return p.id === r.relId && p.relId; });
       if (parentEntry && stillUnresolved.indexOf(parentEntry) !== -1) {
-        // Parent not resolved yet — defer
         stillUnresolved.push(r);
         return;
       }
-      // Parent resolved — apply offset
       nodes[r.id].x = snap(parent.x + Math.round(r.rawX * GRID_SIZE));
       nodes[r.id].y = snap(parent.y + r.rawY * GRID_SIZE * 2);
       progressMade = true;

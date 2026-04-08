@@ -12,19 +12,20 @@ function makeFocusId(base) {
 function makeNode(gx, gy, focusId, label, gfxIcon) {
   const fid = focusId || makeFocusId();
   state.nodes[fid] = {
-    id:                 fid,
-    x:                  snap(gx),
-    y:                  snap(gy),
-    label:              label   || fid,
-    gfxIcon:            gfxIcon || DEFAULT_ICON,
-    cost:               10,
-    search_filters:     [],
-    prerequisite:       [],
-    mutually_exclusive: [],
-    completion_reward:  '',
-    available:          '',
-    bypass:             '',
-    cancel_if_invalid:  false,
+    id:                   fid,
+    x:                    snap(gx),
+    y:                    snap(gy),
+    label:                label   || fid,
+    gfxIcon:              gfxIcon || DEFAULT_ICON,
+    cost:                 10,
+    search_filters:       [],
+    prerequisite:         [],
+    mutually_exclusive:   [],
+    relative_position_id: '',
+    completion_reward:    '',
+    available:            '',
+    bypass:               '',
+    cancel_if_invalid:    false,
   };
   AppConsole.log(`Created focus: ${fid}`);
   return fid;
@@ -37,8 +38,9 @@ function renameFocus(oldId, newId) {
   state.nodes[newId] = { ...state.nodes[oldId], id: newId };
   delete state.nodes[oldId];
   Object.values(state.nodes).forEach(n => {
-    n.prerequisite       = (n.prerequisite       || []).map(x => x === oldId ? newId : x);
-    n.mutually_exclusive = (n.mutually_exclusive || []).map(x => x === oldId ? newId : x);
+    n.prerequisite         = (n.prerequisite         || []).map(x => x === oldId ? newId : x);
+    n.mutually_exclusive   = (n.mutually_exclusive   || []).map(x => x === oldId ? newId : x);
+    if (n.relative_position_id === oldId) n.relative_position_id = newId;
   });
   if (state.treeMeta.initialShowFocus === oldId) state.treeMeta.initialShowFocus = newId;
   if (state.selectedId === oldId) state.selectedId = newId;
@@ -49,8 +51,9 @@ function renameFocus(oldId, newId) {
 function deleteNode(id) {
   if (!id || !state.nodes[id]) return;
   Object.values(state.nodes).forEach(n => {
-    n.prerequisite       = (n.prerequisite       || []).filter(x => x !== id);
-    n.mutually_exclusive = (n.mutually_exclusive || []).filter(x => x !== id);
+    n.prerequisite         = (n.prerequisite         || []).filter(x => x !== id);
+    n.mutually_exclusive   = (n.mutually_exclusive   || []).filter(x => x !== id);
+    if (n.relative_position_id === id) n.relative_position_id = '';
   });
   if (state.treeMeta.initialShowFocus === id) state.treeMeta.initialShowFocus = '';
   delete state.nodes[id];

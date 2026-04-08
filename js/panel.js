@@ -35,6 +35,7 @@ function refreshFocusPanel(id) {
   document.getElementById('ep-cost-days').textContent = (n.cost || 0) * 7 + ' days';
   document.getElementById('ep-prereq').value     = (n.prerequisite       || []).join(', ');
   document.getElementById('ep-mutex').value      = (n.mutually_exclusive || []).join(', ');
+  document.getElementById('ep-rel-pos').value    = n.relative_position_id || '';
   document.getElementById('ep-reward').value     = n.completion_reward || '';
   document.getElementById('ep-available').value  = n.available || '';
   document.getElementById('ep-bypass').value     = n.bypass    || '';
@@ -55,6 +56,18 @@ function updateNodeProp(key, val) {
   state.nodes[state.selectedId][key] = val;
   if (key === 'cost') document.getElementById('ep-cost-days').textContent = (val || 0) * 7 + ' days';
   if (key === 'gfxIcon') refreshIconPicker(val);
+  renderAll(); selectNode(state.selectedId);
+}
+
+function updateRelativePositionId(rawVal) {
+  if (!state.selectedId || !state.nodes[state.selectedId]) return;
+  const n = state.nodes[state.selectedId];
+  const val = rawVal.trim();
+
+  if (val && !state.nodes[val]) {
+    AppConsole.warn(`relative_position_id: focus "${val}" not found`);
+  }
+  n.relative_position_id = val || '';
   renderAll(); selectNode(state.selectedId);
 }
 
@@ -189,14 +202,35 @@ function updateTreeMeta(key, val) {
 }
 
 // ── Context menu ──────────────────────────────────────────────
+let _ctxMenuOpen = false;
+
 function showCtxMenu(x, y) {
   const m = document.getElementById('ctx-menu');
   m.style.display = 'block';
   m.style.left = Math.min(x, window.innerWidth  - 210) + 'px';
   m.style.top  = Math.min(y, window.innerHeight - 100) + 'px';
-  document.addEventListener('mousedown', closeCtxMenu, { once: true });
+  _ctxMenuOpen = true;
+
+  // Use setTimeout so this mousedown event doesn't immediately close the menu
+  setTimeout(() => {
+    document.addEventListener('mousedown', _onOutsideCtxClick);
+  }, 0);
 }
-function closeCtxMenu() { document.getElementById('ctx-menu').style.display = 'none'; }
+
+function _onOutsideCtxClick(e) {
+  const m = document.getElementById('ctx-menu');
+  if (m && !m.contains(e.target)) {
+    closeCtxMenu();
+  }
+}
+
+function closeCtxMenu() {
+  if (!_ctxMenuOpen) return;
+  _ctxMenuOpen = false;
+  document.getElementById('ctx-menu').style.display = 'none';
+  document.removeEventListener('mousedown', _onOutsideCtxClick);
+}
+
 function ctxEdit()   { closeCtxMenu(); selectNode(state.ctxNodeId); openFocusPanel(state.ctxNodeId); }
 function ctxDelete() { deleteNode(state.ctxNodeId); state.ctxNodeId = null; closeCtxMenu(); renderAll(); }
 
