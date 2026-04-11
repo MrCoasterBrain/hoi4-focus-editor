@@ -2,20 +2,31 @@
 
 function renderAll() { renderBoundary(); renderCF(); renderEdges(); renderNodes(); }
 
-// ── Tree boundary (grid origin marker) ───────────────────────
+// ── Tree boundary ─────────────────────────────────────────────
+// Nodes are centered at their (x,y) with transform: translate(-50%,-50%).
+// A node at (0,0) has its icon spanning from -60px to +60px in each axis.
+// We offset the boundary by -NODE_HALF so the node at grid (0,0) is fully inside.
+const NODE_HALF = 60; // half of node visual size (icon 96px + label, generous margin)
+
 function renderBoundary() {
   let el = document.getElementById('tree-boundary');
   if (!el) {
     el = document.createElement('div');
     el.id = 'tree-boundary';
+    // Corner label
+    const corner = document.createElement('div');
+    corner.className = 'boundary-origin-label';
+    corner.textContent = '0,0';
+    el.appendChild(corner);
     document.getElementById('world').appendChild(el);
   }
-  // The boundary starts at world (0,0) and extends to cover the canvas.
-  // Focuses at x>=0 and y>=0 are "inside". We show a frame around that region.
-  el.style.left   = '0px';
-  el.style.top    = '0px';
-  el.style.width  = '7800px';
-  el.style.height = '5800px';
+  // Start the boundary half a node-size before world origin so (0,0) node sits inside
+  const ox = -NODE_HALF;
+  const oy = -NODE_HALF;
+  el.style.left   = ox + 'px';
+  el.style.top    = oy + 'px';
+  el.style.width  = (7800 - ox) + 'px';
+  el.style.height = (5800 - oy) + 'px';
 }
 
 // ── Continuous Focus zone ─────────────────────────────────────
@@ -74,7 +85,6 @@ function renderEdges() {
 
   const badNodes = getInvalidPrereqNodes();
 
-  // Draw edges per group — OR-groups get different colour
   Object.values(state.nodes).forEach(n => {
     const groups = n.prerequisite_groups || [];
     groups.forEach(group => {
@@ -82,13 +92,11 @@ function renderEdges() {
       group.forEach(pid => {
         const f = state.nodes[pid];
         if (!f) return;
-        const isBad = badNodes.has(n.id);
-        drawRequire(svg, f, n, isBad, isOR);
+        drawRequire(svg, f, n, badNodes.has(n.id), isOR);
       });
     });
   });
 
-  // Exclusive edges
   const seen = new Set();
   Object.values(state.nodes).forEach(n => {
     (n.mutually_exclusive || []).forEach(eid => {
@@ -104,15 +112,14 @@ function drawRequire(svg, f, t, isBad, isOR) {
   const x1=f.x, y1=f.y+48, x2=t.x, y2=t.y-48, my=(y1+y2)/2;
   const p = svgEl('path');
   p.setAttribute('d', `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`);
-  let stroke = '#4a3a20';
-  let marker = 'url(#arr)';
-  if (isBad)  { stroke = '#8b2020'; marker = 'url(#arr-bad)'; }
-  else if (isOR) { stroke = '#2a5a8a'; marker = 'url(#arr-or)'; }
+  let stroke = '#4a3a20', marker = 'url(#arr)';
+  if (isBad)       { stroke = '#8b2020'; marker = 'url(#arr-bad)'; }
+  else if (isOR)   { stroke = '#2a5a8a'; marker = 'url(#arr-or)'; }
   p.setAttribute('stroke', stroke);
   p.setAttribute('stroke-width', '1.5');
   p.setAttribute('fill', 'none');
   p.setAttribute('marker-end', marker);
-  if (isBad) p.setAttribute('stroke-dasharray', '4,3');
+  if (isBad)     p.setAttribute('stroke-dasharray', '4,3');
   else if (isOR) p.setAttribute('stroke-dasharray', '6,3');
   svg.appendChild(p);
 }
@@ -144,7 +151,6 @@ function getNodeIconSrc(n) {
   return SPRITE_MAP[DEFAULT_ICON] || '';
 }
 
-// Focus type badge colours
 const TYPE_BADGE = {
   [FOCUS_TYPE_SHARED]: { text: 'SHR', bg: '#1a3a5a', border: '#2a6a9a', color: '#6ab0e0' },
   [FOCUS_TYPE_JOINT]:  { text: 'JNT', bg: '#2a1a4a', border: '#5a2a9a', color: '#a080e0' },
@@ -157,13 +163,16 @@ function renderNodes() {
   const badNodes = getInvalidPrereqNodes();
 
   Object.values(state.nodes).forEach(n => {
-    const isSel  = state.selectedId === n.id;
-    const hasEx  = (n.mutually_exclusive || []).some(eid => state.nodes[eid]);
-    const isBad  = badNodes.has(n.id);
-    const imgSrc = getNodeIconSrc(n);
-    const label  = getNodeLabel(n);
+    const isSel     = state.selectedId === n.id;
+    const hasEx     = (n.mutually_exclusive || []).some(eid => state.nodes[eid]);
+    const isBad     = badNodes.has(n.id);
+    const imgSrc    = getNodeIconSrc(n);
+    const label     = getNodeLabel(n);
     const typeBadge = TYPE_BADGE[n.focusType];
-    const isOutside = n.x < 0 || n.y < 0;
+    // A node is "outside" if its HoI4 grid coords are negative
+    const hx = Math.round(n.x / GRID_SIZE);
+    const hy = Math.round(n.y / (GRID_SIZE * 2));
+    const isOutside = hx < 0 || hy < 0;
 
     const el = document.createElement('div');
     el.className = `node${isSel ? ' selected' : ''}${isBad ? ' invalid-prereq' : ''}${isOutside ? ' node-outside' : ''}`;
@@ -171,14 +180,13 @@ function renderNodes() {
     el.style.left = n.x + 'px';
     el.style.top  = n.y + 'px';
 
-    let badgeBadge = '';
-    if (typeBadge) {
-      badgeBadge = `<div class="node-type-badge" style="background:${typeBadge.bg};border-color:${typeBadge.border};color:${typeBadge.color}">${typeBadge.text}</div>`;
-    }
+    const badgeBadge = typeBadge
+      ? `<div class="node-type-badge" style="background:${typeBadge.bg};border-color:${typeBadge.border};color:${typeBadge.color}">${typeBadge.text}</div>`
+      : '';
 
     el.innerHTML = `
       <div class="node-icon">
-        ${imgSrc ? `<img src="${imgSrc}" alt="${n.gfxIcon || ''}" draggable="false" onerror="this.style.display='none'">` : ''}
+        ${imgSrc ? `<img src="${imgSrc}" alt="${n.gfxIcon||''}" draggable="false" onerror="this.style.display='none'">` : ''}
         ${hasEx ? '<div class="node-ex-badge">✕</div>' : ''}
         ${badgeBadge}
       </div>
@@ -202,19 +210,33 @@ function renderNodes() {
       world.appendChild(btn);
     }
   });
+
+  // Update coords display if panel is open
+  if (state.selectedId && state.nodes[state.selectedId]) {
+    const n = state.nodes[state.selectedId];
+    const coordsEl = document.getElementById('ep-coords');
+    if (coordsEl) {
+      const hx = Math.round(n.x / GRID_SIZE);
+      const hy = Math.round(n.y / (GRID_SIZE * 2));
+      coordsEl.textContent = `x = ${hx}  y = ${hy}  (px: ${n.x}, ${n.y})`;
+    }
+  }
 }
 
 // ── Tooltip ───────────────────────────────────────────────────
 function showTooltip(n) {
   const t = document.getElementById('tooltip');
+  const hx = Math.round(n.x / GRID_SIZE);
+  const hy = Math.round(n.y / (GRID_SIZE * 2));
   const days = n.cost ? `<br><span style="color:var(--gold-dim);font-size:10px">Cost: ${n.cost} × 7 = ${n.cost*7} days</span>` : '';
   const icon = n.gfxIcon ? `<br><span style="color:var(--text-dim);font-size:10px">${n.gfxIcon}</span>` : '';
   const typeLabel = n.focusType !== FOCUS_TYPE_NORMAL
     ? `<br><span style="color:#6ab0e0;font-size:10px">${n.focusType}</span>` : '';
-  const bad  = (n.prerequisite_groups || []).some(g => g.some(pid => state.nodes[pid] && state.nodes[pid].y >= n.y))
+  const coords = `<br><span style="color:var(--text-dim);font-size:10px">x=${hx} y=${hy}</span>`;
+  const bad = (n.prerequisite_groups || []).some(g => g.some(pid => state.nodes[pid] && state.nodes[pid].y >= n.y))
     ? `<br><span style="color:#c05050;font-size:10px">⚠ Invalid prerequisite</span>` : '';
   const label = getNodeLabel(n);
-  t.innerHTML = `<strong style="font-family:'Cinzel',serif;color:var(--gold);font-size:11px">${label}</strong><br><span style="color:var(--text-dim);font-size:10px">${n.id}</span>${typeLabel}${icon}${days}${bad}`;
+  t.innerHTML = `<strong style="font-family:'Cinzel',serif;color:var(--gold);font-size:11px">${label}</strong><br><span style="color:var(--text-dim);font-size:10px">${n.id}</span>${typeLabel}${icon}${coords}${days}${bad}`;
   t.style.display = 'block';
   document.addEventListener('mousemove', _moveTooltip);
 }

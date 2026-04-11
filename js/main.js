@@ -7,7 +7,6 @@ function init() {
   setupCanvas();
   initFocusPanelPickers();
 
-  // Sample tree
   makeNode(5*GRID_SIZE*2, 1*GRID_SIZE*2, 'GER_national_unity',     'National Unity',    'GFX_focus_generic_the_giant_wakes');
   makeNode(5*GRID_SIZE*2, 3*GRID_SIZE*2, 'GER_industrial_base',    'Industrial Base',   'GFX_goal_generic_production');
   makeNode(4*GRID_SIZE*2, 5*GRID_SIZE*2, 'GER_civilian_industry',  'Civilian Industry', 'GFX_focus_generic_steel');
@@ -24,7 +23,6 @@ function init() {
   state.nodes['GER_factory_expansion'].cost  = 5;
   state.nodes['GER_arms_manufacturing'].cost = 10;
 
-  // Use prerequisite_groups format
   state.nodes['GER_industrial_base'].prerequisite_groups    = [['GER_national_unity']];
   state.nodes['GER_civilian_industry'].prerequisite_groups  = [['GER_industrial_base']];
   state.nodes['GER_military_industry'].prerequisite_groups  = [['GER_industrial_base']];
