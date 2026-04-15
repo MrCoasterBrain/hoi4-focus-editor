@@ -126,6 +126,7 @@ function openFocusPanel(id) {
   document.getElementById('panel-focus').style.display = 'flex';
   document.getElementById('panel-tree').style.display  = 'none';
   document.getElementById('edit-panel').classList.add('open');
+  // FIX: call refreshFocusPanel AFTER panel is visible so prereq groups render correctly
   refreshFocusPanel(id);
   renderNodes();
 }
@@ -321,6 +322,8 @@ function refreshFocusPanel(id) {
     b.classList.toggle('active-filter', (n.search_filters || []).includes(b.dataset.f)));
 
   refreshIconPicker(n.gfxIcon);
+
+  // FIX: always re-render prereq groups to reflect current state
   renderPrereqGroups(id);
 
   // Close any open dropdowns when switching focus

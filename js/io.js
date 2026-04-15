@@ -24,6 +24,7 @@ function importJSON() {
 }
 
 // ── HoI4 .txt export ─────────────────────────────────────────
+// FIX: shared_focus and joint_focus are exported OUTSIDE the focus_tree = { } block
 function exportHoI4() {
   try {
     const m = state.treeMeta;
@@ -42,7 +43,10 @@ function exportHoI4() {
     const sharedNodes = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_SHARED);
     const jointNodes  = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_JOINT);
 
-    if (normalNodes.length > 0 || jointNodes.length > 0) {
+    // Normal focuses (and joint_focus that belong inside the tree block) go inside focus_tree = { }
+    // shared_focus blocks go OUTSIDE focus_tree = { } entirely
+    // joint_focus also goes OUTSIDE focus_tree = { } per HoI4 modding convention
+    if (normalNodes.length > 0) {
       out += 'focus_tree = {\n';
       out += T + 'id = ' + m.treeId + '\n';
       if (m.countryBlock && m.countryBlock.trim()) {
@@ -54,11 +58,12 @@ function exportHoI4() {
       if (m.initialShowFocus) out += T + 'initial_show_position = { focus = ' + m.initialShowFocus + ' }\n';
       out += '\n';
       normalNodes.forEach(n => { out += _serializeFocus(n, T, 'focus'); });
-      jointNodes.forEach(n  => { out += _serializeFocus(n, T, 'joint_focus'); });
       out += '}\n\n';
     }
 
+    // shared_focus and joint_focus go OUTSIDE the focus_tree block
     sharedNodes.forEach(n => { out += _serializeFocus(n, '', 'shared_focus'); });
+    jointNodes.forEach(n  => { out += _serializeFocus(n, '', 'joint_focus'); });
 
     _download(out, 'focus_tree.txt', 'text/plain');
     AppConsole.log('Exported HoI4 .txt.');
@@ -136,8 +141,12 @@ function importHoI4() {
       });
 
       // Detect unresolved shared_focus references
+      // FIX: also check inline shared_focus = focus_id references found during parse
       const missing = _findMissingRefs(_importAccNodes);
-      _importMissingRefs = missing;
+      // Merge with any inline shared refs detected during parse
+      const allMissing = Array.from(new Set([...missing, ...(result.inlineSharedRefs || [])]
+        .filter(id => !_importAccNodes[id])));
+      _importMissingRefs = allMissing;
 
       state.nodes    = _importAccNodes;
       state.treeMeta = { ...state.treeMeta, ..._importAccMeta };
@@ -145,8 +154,8 @@ function importHoI4() {
       closePanel(); renderAll();
       AppConsole.log('Imported: ' + Object.keys(_importAccNodes).length + ' focuses total.');
 
-      if (missing.length > 0) {
-        _promptMissingFiles(missing);
+      if (allMissing.length > 0) {
+        _promptMissingFiles(allMissing);
       } else {
         // All resolved — reset accumulators
         _importAccNodes = null;
@@ -237,15 +246,27 @@ function parseHoI4FocusTree(text) {
   var treeMeta = { treeId: '', countryBlock: '', initialShowFocus: '', cfX: 100, cfY: 1230 };
   var nodes = {};
   var rawFocuses = [];
+  // FIX: collect inline "shared_focus = some_focus_id" references (not blocks)
+  var inlineSharedRefs = [];
 
   outerBlock.forEach(function(item) {
     if (!item || item.type !== 'assign') return;
     if (item.key === 'focus_tree') {
-      _parseFocusTreeBlock(item.block || [], treeMeta, nodes, rawFocuses, FOCUS_TYPE_NORMAL);
+      _parseFocusTreeBlock(item.block || [], treeMeta, nodes, rawFocuses, FOCUS_TYPE_NORMAL, inlineSharedRefs);
     } else if (item.key === 'shared_focus') {
-      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+      // Could be a block (shared_focus = { ... }) or inline ref (shared_focus = focus_id)
+      if (item.block) {
+        _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+      } else if (item.value) {
+        // inline reference: shared_focus = some_id — record as missing ref
+        if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
+      }
     } else if (item.key === 'joint_focus') {
-      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+      if (item.block) {
+        _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+      } else if (item.value) {
+        if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
+      }
     } else if (item.key === 'focus') {
       _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_NORMAL);
     }
@@ -256,10 +277,10 @@ function parseHoI4FocusTree(text) {
   var cnt = Object.keys(nodes).length;
   AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
   if (cnt === 0) AppConsole.warn('No focuses found — check file format.');
-  return { nodes: nodes, treeMeta: treeMeta };
+  return { nodes: nodes, treeMeta: treeMeta, inlineSharedRefs: inlineSharedRefs };
 }
 
-function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType) {
+function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType, inlineSharedRefs) {
   root.forEach(function(item) {
     if (!item || item.type !== 'assign') return;
     if (item.key === 'id')       { treeMeta.treeId = item.value; }
@@ -277,7 +298,15 @@ function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType) {
     } else if (item.key === 'joint_focus') {
       _parseSingleFocus(item.block||[], nodes, rawFocuses, FOCUS_TYPE_JOINT);
     } else if (item.key === 'shared_focus') {
-      _parseSingleFocus(item.block||[], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+      // Inside focus_tree block: could be a block or an inline reference
+      if (item.block) {
+        _parseSingleFocus(item.block||[], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+      } else if (item.value) {
+        // inline: shared_focus = some_focus_id — this is a reference to an external shared focus
+        if (inlineSharedRefs && !inlineSharedRefs.includes(item.value)) {
+          inlineSharedRefs.push(item.value);
+        }
+      }
     }
   });
 }

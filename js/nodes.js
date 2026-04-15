@@ -133,7 +133,9 @@ function addChildNode(parentId) {
     !Object.values(state.nodes).find(n => n.x === c.x && n.y === c.y)
   ) || { x: p.x, y: p.y + GRID_SIZE * 4 };
 
-  const id = makeNode(pos.x, pos.y);
+  // FIX: inherit parent's focus type (shared_focus / joint_focus / normal)
+  const inheritedType = p.focusType || FOCUS_TYPE_NORMAL;
+  const id = makeNode(pos.x, pos.y, null, '', DEFAULT_ICON, inheritedType);
   // AND-prerequisite: single group with one id
   state.nodes[id].prerequisite_groups = [[parentId]];
   state.nodes[id].relative_position_id = parentId;
