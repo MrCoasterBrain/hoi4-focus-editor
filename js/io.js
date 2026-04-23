@@ -24,14 +24,13 @@ function importJSON() {
 }
 
 // ── HoI4 .txt export ─────────────────────────────────────────
-// FIX: shared_focus and joint_focus are exported OUTSIDE the focus_tree = { } block
+// shared_focus and joint_focus are exported OUTSIDE the focus_tree = { } block
 function exportHoI4() {
   try {
     const m = state.treeMeta;
     const T = '    ';
     let out = '';
 
-    // Localisation comment for custom labels
     const customLabels = Object.values(state.nodes).filter(n => hasCustomLabel(n));
     if (customLabels.length > 0) {
       out += '# l_russian:\n';
@@ -43,9 +42,6 @@ function exportHoI4() {
     const sharedNodes = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_SHARED);
     const jointNodes  = Object.values(state.nodes).filter(n => n.focusType === FOCUS_TYPE_JOINT);
 
-    // Normal focuses (and joint_focus that belong inside the tree block) go inside focus_tree = { }
-    // shared_focus blocks go OUTSIDE focus_tree = { } entirely
-    // joint_focus also goes OUTSIDE focus_tree = { } per HoI4 modding convention
     if (normalNodes.length > 0) {
       out += 'focus_tree = {\n';
       out += T + 'id = ' + m.treeId + '\n';
@@ -117,59 +113,160 @@ function _serializeFocus(n, indent, keyword) {
 }
 
 // ── HoI4 .txt import ─────────────────────────────────────────
-// State for accumulating nodes across multiple file imports
+// Accumulator state for multi-file import session
 let _importAccNodes    = null;
 let _importAccMeta     = null;
-let _importMissingRefs = [];
+// Set of all required focus IDs found via shared_focus = id references
+let _importRequiredIds = new Set();
 
 function importHoI4() {
   _pickFile('.txt,.hoi4', text => {
     try {
       const result = parseHoI4FocusTree(text);
 
-      // First file: initialise accumulators
+      // First file — initialise accumulators
       if (_importAccNodes === null) {
         _importAccNodes = {};
         _importAccMeta  = { treeId: '', countryBlock: '', initialShowFocus: '', cfX: 100, cfY: 1230 };
+        _importRequiredIds = new Set();
       }
 
-      // Merge nodes (new file wins on conflict)
+      // Merge nodes
       Object.assign(_importAccNodes, result.nodes);
-      // Merge meta (non-empty values win)
+
+      // Merge meta
       Object.keys(result.treeMeta).forEach(k => {
         if (result.treeMeta[k]) _importAccMeta[k] = result.treeMeta[k];
       });
 
-      // Detect unresolved shared_focus references
-      // FIX: also check inline shared_focus = focus_id references found during parse
-      const missing = _findMissingRefs(_importAccNodes);
-      // Merge with any inline shared refs detected during parse
-      const allMissing = Array.from(new Set([...missing, ...(result.inlineSharedRefs || [])]
-        .filter(id => !_importAccNodes[id])));
-      _importMissingRefs = allMissing;
+      // Accumulate all inline shared_focus references found across files
+      (result.inlineSharedRefs || []).forEach(id => _importRequiredIds.add(id));
 
+      // Also add any prerequisite/mutex/relpos refs that are missing
+      _findMissingRefs(_importAccNodes).forEach(id => _importRequiredIds.add(id));
+
+      // Apply to state
       state.nodes    = _importAccNodes;
       state.treeMeta = { ...state.treeMeta, ..._importAccMeta };
       state.selectedId = null;
       closePanel(); renderAll();
       AppConsole.log('Imported: ' + Object.keys(_importAccNodes).length + ' focuses total.');
 
-      if (allMissing.length > 0) {
-        _promptMissingFiles(allMissing);
+      // Which required IDs are still missing?
+      const stillMissing = Array.from(_importRequiredIds).filter(id => !_importAccNodes[id]);
+
+      if (stillMissing.length > 0) {
+        _showMissingModal();
+      } else if (_importRequiredIds.size > 0) {
+        // Had requirements, all now satisfied — auto-close and reset
+        _closeMissingModal(true);
       } else {
-        // All resolved — reset accumulators
-        _importAccNodes = null;
-        _importAccMeta  = null;
+        // No cross-file requirements at all — clean session end
+        _resetImportSession();
       }
     } catch(e) {
       AppConsole.error('Import HoI4: ' + e.message);
-      _importAccNodes = null;
-      _importAccMeta  = null;
+      _resetImportSession();
     }
   });
 }
 
-// Find focus IDs referenced in prerequisite/relative_position_id but not present in nodes
+function _resetImportSession() {
+  _importAccNodes    = null;
+  _importAccMeta     = null;
+  _importRequiredIds = new Set();
+}
+
+// ── Missing-refs modal ────────────────────────────────────────
+// Renders (or re-renders) the modal showing required IDs with checkmark status.
+function _showMissingModal() {
+  let modal = document.getElementById('missing-refs-modal');
+
+  // Build fresh if not present
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'missing-refs-modal';
+    modal.className = 'modal-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'modal-box';
+    box.id = 'missing-refs-box';
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+
+    modal.addEventListener('mousedown', e => {
+      if (e.target === modal) {
+        _closeMissingModal(false);
+        _resetImportSession();
+      }
+    });
+  }
+
+  _refreshMissingModalContent();
+}
+
+function _refreshMissingModalContent() {
+  const box = document.getElementById('missing-refs-box');
+  if (!box) return;
+
+  const allRequired = Array.from(_importRequiredIds).sort();
+  const knownIds    = Object.keys(_importAccNodes || {});
+  const stillMissing = allRequired.filter(id => !knownIds.includes(id));
+  const resolved     = allRequired.filter(id =>  knownIds.includes(id));
+
+  box.innerHTML = `
+    <h3 class="modal-title">Загрузка связанных файлов</h3>
+    <p class="modal-desc">Файлы ссылаются на следующие фокусы. Загрузите файлы, содержащие недостающие.</p>
+    <div class="modal-missing-list" id="modal-missing-list">
+      ${allRequired.map(id => {
+        const done = resolved.includes(id);
+        return `<div class="modal-missing-item ${done ? 'modal-item-done' : 'modal-item-pending'}">
+          <span class="modal-item-check">${done ? '✓' : '○'}</span>
+          <span class="fpi-id">${id}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="panel-btn" id="modal-add-file-btn">+ Добавить файл</button>
+      <button class="panel-btn danger" id="modal-dismiss-btn">Закрыть</button>
+    </div>`;
+
+  document.getElementById('modal-add-file-btn').addEventListener('click', () => {
+    // Don't close modal — keep it open while user picks a file
+    importHoI4();
+  });
+
+  document.getElementById('modal-dismiss-btn').addEventListener('click', () => {
+    const missing = allRequired.filter(id => !Object.keys(_importAccNodes || {}).includes(id));
+    if (missing.length > 0) {
+      AppConsole.warn('Import closed with ' + missing.length + ' unresolved references: ' + missing.join(', '));
+    }
+    _closeMissingModal(false);
+    _resetImportSession();
+  });
+}
+
+function _closeMissingModal(autoClose) {
+  const modal = document.getElementById('missing-refs-modal');
+  if (!modal) return;
+
+  if (autoClose) {
+    // Brief "all done" flash before removing
+    const box = document.getElementById('missing-refs-box');
+    if (box) {
+      box.innerHTML = `
+        <div style="text-align:center;padding:24px 16px;">
+          <div style="font-size:32px;color:var(--gold);margin-bottom:12px">✓</div>
+          <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold);letter-spacing:1px">Все фокусы загружены</div>
+        </div>`;
+    }
+    setTimeout(() => { modal.remove(); }, 900);
+  } else {
+    modal.remove();
+  }
+}
+
+// ── Reference finder ─────────────────────────────────────────
 function _findMissingRefs(nodes) {
   const known = new Set(Object.keys(nodes));
   const missing = new Set();
@@ -189,54 +286,6 @@ function _findMissingRefs(nodes) {
   return Array.from(missing);
 }
 
-function _promptMissingFiles(missing) {
-  // Build modal
-  let modal = document.getElementById('missing-refs-modal');
-  if (modal) modal.remove();
-
-  modal = document.createElement('div');
-  modal.id = 'missing-refs-modal';
-  modal.className = 'modal-overlay';
-
-  const box = document.createElement('div');
-  box.className = 'modal-box';
-
-  box.innerHTML = `
-    <h3 class="modal-title">Missing Focus References</h3>
-    <p class="modal-desc">The imported file references focus IDs that were not found. Please add the files that contain them.</p>
-    <div class="modal-missing-list">
-      ${missing.map(id => `<div class="modal-missing-item"><span class="fpi-id">${id}</span></div>`).join('')}
-    </div>
-    <div class="modal-actions">
-      <button class="panel-btn" id="modal-add-file-btn">+ Add File</button>
-      <button class="panel-btn danger" id="modal-dismiss-btn">Dismiss</button>
-    </div>`;
-
-  modal.appendChild(box);
-  document.body.appendChild(modal);
-
-  document.getElementById('modal-add-file-btn').addEventListener('click', () => {
-    modal.remove();
-    importHoI4(); // open file picker again; will merge into accumulators
-  });
-
-  document.getElementById('modal-dismiss-btn').addEventListener('click', () => {
-    modal.remove();
-    // Reset accumulators — user is done
-    _importAccNodes = null;
-    _importAccMeta  = null;
-    AppConsole.warn('Import finished with ' + missing.length + ' unresolved references: ' + missing.join(', '));
-  });
-
-  modal.addEventListener('mousedown', e => {
-    if (e.target === modal) {
-      modal.remove();
-      _importAccNodes = null;
-      _importAccMeta  = null;
-    }
-  });
-}
-
 // ── HoI4 parser ───────────────────────────────────────────────
 function parseHoI4FocusTree(text) {
   var src    = text.replace(/#[^\n]*/g, '');
@@ -246,7 +295,7 @@ function parseHoI4FocusTree(text) {
   var treeMeta = { treeId: '', countryBlock: '', initialShowFocus: '', cfX: 100, cfY: 1230 };
   var nodes = {};
   var rawFocuses = [];
-  // FIX: collect inline "shared_focus = some_focus_id" references (not blocks)
+  // Inline shared_focus = focus_id references (not full blocks)
   var inlineSharedRefs = [];
 
   outerBlock.forEach(function(item) {
@@ -254,21 +303,19 @@ function parseHoI4FocusTree(text) {
     if (item.key === 'focus_tree') {
       _parseFocusTreeBlock(item.block || [], treeMeta, nodes, rawFocuses, FOCUS_TYPE_NORMAL, inlineSharedRefs);
     } else if (item.key === 'shared_focus') {
-      // Could be a block (shared_focus = { ... }) or inline ref (shared_focus = focus_id)
       if (item.block) {
-        _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+        _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_SHARED);
       } else if (item.value) {
-        // inline reference: shared_focus = some_id — record as missing ref
         if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
       }
     } else if (item.key === 'joint_focus') {
       if (item.block) {
-        _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+        _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_JOINT);
       } else if (item.value) {
         if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
       }
     } else if (item.key === 'focus') {
-      _parseSingleFocus(item.block || [], nodes, rawFocuses, FOCUS_TYPE_NORMAL);
+      if (item.block) _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_NORMAL);
     }
   });
 
@@ -294,15 +341,14 @@ function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType, in
       var fIt = (item.block||[]).find(function(b){ return b.key==='focus'; });
       if (fIt) treeMeta.initialShowFocus = fIt.value;
     } else if (item.key === 'focus') {
-      _parseSingleFocus(item.block||[], nodes, rawFocuses, defaultType);
+      if (item.block) _parseSingleFocus(item.block, nodes, rawFocuses, defaultType);
     } else if (item.key === 'joint_focus') {
-      _parseSingleFocus(item.block||[], nodes, rawFocuses, FOCUS_TYPE_JOINT);
+      if (item.block) _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_JOINT);
     } else if (item.key === 'shared_focus') {
-      // Inside focus_tree block: could be a block or an inline reference
       if (item.block) {
-        _parseSingleFocus(item.block||[], nodes, rawFocuses, FOCUS_TYPE_SHARED);
+        _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_SHARED);
       } else if (item.value) {
-        // inline: shared_focus = some_focus_id — this is a reference to an external shared focus
+        // inline reference inside focus_tree block: shared_focus = some_id
         if (inlineSharedRefs && !inlineSharedRefs.includes(item.value)) {
           inlineSharedRefs.push(item.value);
         }
@@ -367,7 +413,7 @@ function _resolveRelativePositions(nodes, rawFocuses) {
     var progressMade = false;
     unresolved.forEach(function(r) {
       var parent = nodes[r.relId];
-      if (!parent) { progressMade = true; return; } // skip unknown refs
+      if (!parent) { progressMade = true; return; }
       var parentStillPending = stillUnresolved.some(function(u){ return u.id === r.relId; });
       if (parentStillPending) { stillUnresolved.push(r); return; }
       nodes[r.id].x = snap(parent.x + Math.round(r.rawX * GRID_SIZE));

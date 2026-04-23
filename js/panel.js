@@ -1,13 +1,13 @@
 // js/panel.js
 
 // ── Focus ID picker widget ────────────────────────────────────
-// Creates a standalone picker: wraps an existing element or builds into a -wrap div
 function buildFocusPicker(inputId, onSelect) {
   const wrap = document.getElementById(inputId + '-wrap');
   if (!wrap) return;
   _buildPickerInto(wrap, inputId, onSelect);
 }
 
+// Returns the created input element directly (avoids getElementById-before-DOM-attachment bug)
 function _buildPickerInto(wrap, inputId, onSelect) {
   wrap.innerHTML = '';
 
@@ -32,7 +32,6 @@ function _buildPickerInto(wrap, inputId, onSelect) {
   dropdown.style.display = 'none';
 
   function openDropdown(filter) {
-    // Close all OTHER dropdowns, but not this one
     document.querySelectorAll('.focus-picker-dropdown').forEach(d => {
       if (d !== dropdown) d.style.display = 'none';
     });
@@ -52,7 +51,6 @@ function _buildPickerInto(wrap, inputId, onSelect) {
   input.addEventListener('input', () => { openDropdown(input.value.toLowerCase()); });
   input.addEventListener('focus', () => { openDropdown(input.value.toLowerCase()); });
   input.addEventListener('blur', () => {
-    // Delay so mousedown on dropdown items fires first
     setTimeout(() => { dropdown.style.display = 'none'; }, 150);
   });
 
@@ -60,6 +58,9 @@ function _buildPickerInto(wrap, inputId, onSelect) {
   row.appendChild(btn);
   wrap.appendChild(row);
   wrap.appendChild(dropdown);
+
+  // Return the input element directly so callers can set .value without getElementById
+  return input;
 }
 
 function _fillDropdown(dropdown, input, filter, onSelect) {
@@ -112,7 +113,6 @@ function _fillDropdown(dropdown, input, filter, onSelect) {
   dropdown.style.display = 'block';
 }
 
-// Close all dropdowns on outside click
 document.addEventListener('mousedown', e => {
   if (!e.target.closest('.focus-picker-row') && !e.target.closest('.focus-picker-dropdown')) {
     document.querySelectorAll('.focus-picker-dropdown').forEach(d => { d.style.display = 'none'; });
@@ -126,7 +126,6 @@ function openFocusPanel(id) {
   document.getElementById('panel-focus').style.display = 'flex';
   document.getElementById('panel-tree').style.display  = 'none';
   document.getElementById('edit-panel').classList.add('open');
-  // FIX: call refreshFocusPanel AFTER panel is visible so prereq groups render correctly
   refreshFocusPanel(id);
   renderNodes();
 }
@@ -191,23 +190,26 @@ function renderPrereqGroups(nodeId) {
       const entryEl = document.createElement('div');
       entryEl.className = 'prereq-entry';
 
-      // Inline picker (not via buildFocusPicker to avoid -wrap requirement)
       const entryWrapId = `prereq-g${gi}-i${idx}`;
       const entryWrap = document.createElement('div');
       entryWrap.id = entryWrapId + '-wrap';
       entryWrap.className = 'prereq-entry-picker';
-      entryEl.appendChild(entryWrap);
 
-      _buildPickerInto(entryWrap, entryWrapId, val => {
+      entryEl.appendChild(entryWrap);
+      groupEl.appendChild(entryEl);
+      // NOTE: groupEl is NOT yet in container here, but entryWrap IS in the live tree
+      // via entryEl -> groupEl. _buildPickerInto returns the input directly,
+      // so we never need getElementById for these dynamically built pickers.
+
+      const inp = _buildPickerInto(entryWrap, entryWrapId, val => {
         if (val !== undefined) {
           group[idx] = val;
-          // Re-render label only, not full groups (avoids losing focus)
           labelEl.textContent = group.length > 1 ? `OR-group ${gi + 1}` : `AND ${gi + 1}`;
           renderAll(); selectNode(nodeId);
         }
       });
 
-      const inp = document.getElementById(entryWrapId);
+      // Use the returned reference — no getElementById needed
       if (inp) {
         inp.value = pid;
         inp.addEventListener('blur', () => {
@@ -233,8 +235,6 @@ function renderPrereqGroups(nodeId) {
         });
         entryEl.appendChild(delBtn);
       }
-
-      groupEl.appendChild(entryEl);
     });
 
     // ── Add OR entry button ──
@@ -298,7 +298,6 @@ function refreshFocusPanel(id) {
   document.getElementById('ep-cost').value     = n.cost;
   document.getElementById('ep-cost-days').textContent = (n.cost || 0) * 7 + ' days';
 
-  // Coordinates display
   const hx = Math.round(n.x / GRID_SIZE);
   const hy = Math.round(n.y / (GRID_SIZE * 2));
   const coordsEl = document.getElementById('ep-coords');
@@ -322,11 +321,8 @@ function refreshFocusPanel(id) {
     b.classList.toggle('active-filter', (n.search_filters || []).includes(b.dataset.f)));
 
   refreshIconPicker(n.gfxIcon);
-
-  // FIX: always re-render prereq groups to reflect current state
   renderPrereqGroups(id);
 
-  // Close any open dropdowns when switching focus
   document.querySelectorAll('.focus-picker-dropdown').forEach(d => { d.style.display = 'none'; });
 }
 

@@ -1,0 +1,68 @@
+/* ── MISSING REFS MODAL ──────────────────────────────────────── */
+/* Append this to style.css */
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.65);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal-box {
+  background: linear-gradient(180deg, #1e1c14 0%, #141810 100%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 4px;
+  padding: 20px 24px;
+  min-width: 340px; max-width: 520px;
+  max-height: 80vh;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.8), inset 0 1px 0 rgba(200,168,75,.1);
+}
+
+.modal-title {
+  font-family: 'Cinzel', serif;
+  font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--gold); border-bottom: 1px solid var(--border);
+  padding-bottom: 8px; flex-shrink: 0;
+}
+
+.modal-desc {
+  font-size: 12px; color: var(--text-dim); font-style: italic; line-height: 1.5;
+}
+
+.modal-missing-list {
+  display: flex; flex-direction: column; gap: 3px;
+  overflow-y: auto; max-height: 340px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  padding-right: 4px;
+}
+
+.modal-missing-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  transition: background .15s;
+}
+
+.modal-item-pending {
+  border: 1px solid rgba(200,168,75,.15);
+  background: rgba(200,168,75,.04);
+  color: var(--text);
+}
+
+.modal-item-done {
+  border: 1px solid rgba(80,160,80,.25);
+  background: rgba(80,160,80,.07);
+  color: #70b070;
+}
+
+.modal-item-check {
+  font-size: 13px; width: 16px; flex-shrink: 0; text-align: center;
+}
+
+.modal-item-pending .modal-item-check { color: var(--text-dim); }
+.modal-item-done    .modal-item-check { color: #70c870; }
+
+.modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0;
+  padding-top: 4px; border-top: 1px solid var(--border);
+}
