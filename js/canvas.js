@@ -23,20 +23,45 @@ function onCanvasDown(e) {
   if (e.button === 0) {
     const t = e.target;
     if (t.id === 'canvas-wrap' || t.id === 'world' || t.id === 'svg-layer') {
-      deselectAll(); closePanel();
+      // Start rectangular selection
+      const worldPos = screenToWorld(e.clientX, e.clientY);
+      state.rectSelecting = true;
+      state.rectStart = { x: worldPos.x, y: worldPos.y };
+      state.rectEnd = { x: worldPos.x, y: worldPos.y };
+      // Don't deselect yet - will do on mouseup if no movement
     }
   }
 }
 function onCanvasMove(e) {
-  if (!state.isPanning) return;
-  state.panX = state.panOrigin.x + (e.clientX - state.panStart.x);
-  state.panY = state.panOrigin.y + (e.clientY - state.panStart.y);
-  applyTransform();
+  if (state.isPanning) {
+    state.panX = state.panOrigin.x + (e.clientX - state.panStart.x);
+    state.panY = state.panOrigin.y + (e.clientY - state.panStart.y);
+    applyTransform();
+  }
+  if (state.rectSelecting) {
+    const worldPos = screenToWorld(e.clientX, e.clientY);
+    state.rectEnd = { x: worldPos.x, y: worldPos.y };
+    renderRectSelection();
+    // Update selection in real-time
+    updateRectSelection();
+  }
 }
 function onCanvasUp(e) {
   if (e.button === 2 && state.isPanning) {
     state.isPanning = false;
     document.getElementById('canvas-wrap').classList.remove('panning');
+  }
+  if (e.button === 0 && state.rectSelecting) {
+    state.rectSelecting = false;
+    const dx = Math.abs(state.rectEnd.x - state.rectStart.x);
+    const dy = Math.abs(state.rectEnd.y - state.rectStart.y);
+    // If very small movement, treat as click (deselect)
+    if (dx < 5 && dy < 5) {
+      deselectAll();
+      closePanel();
+    }
+    removeRectOverlay();
+    renderNodes();
   }
 }
 
@@ -70,6 +95,15 @@ function resetView() { state.zoom = 1; state.panX = 120; state.panY = 120; apply
 function onNodeMouseDown(e, id) {
   if (e.button === 2) { e.stopPropagation(); return; }
   e.stopPropagation();
+
+  // If clicking on a node that's not in the current selection, reset selection to just this node
+  // (Shift-click to add to selection could be added later)
+  if (!state.selectedIds.includes(id)) {
+    state.selectedIds = [id];
+    state.selectedId = id;
+    renderNodes();
+  }
+
   state.dragId     = id;
   state.dragMoved  = false;
   state.dragStart0 = { x: e.clientX, y: e.clientY };
@@ -84,17 +118,44 @@ function onDragMove(e) {
     state.dragMoved = true;
   if (state.dragMoved) {
     const pos = screenToWorld(e.clientX, e.clientY);
-    state.nodes[state.dragId].x = snap(pos.x - state.dragOffset.x);
-    state.nodes[state.dragId].y = snap(pos.y - state.dragOffset.y);
-    const el = document.getElementById('node-' + state.dragId);
-    if (el) { el.style.left = state.nodes[state.dragId].x + 'px'; el.style.top = state.nodes[state.dragId].y + 'px'; }
+    const newX = snap(pos.x - state.dragOffset.x);
+    const newY = snap(pos.y - state.dragOffset.y);
+
+    // Calculate delta from current position
+    const dx = newX - state.nodes[state.dragId].x;
+    const dy = newY - state.nodes[state.dragId].y;
+
+    // Move all selected nodes by the same delta
+    state.selectedIds.forEach(nodeId => {
+      if (state.nodes[nodeId]) {
+        state.nodes[nodeId].x += dx;
+        state.nodes[nodeId].y += dy;
+      }
+    });
+
+    // Update DOM positions for all selected nodes
+    state.selectedIds.forEach(nodeId => {
+      const el = document.getElementById('node-' + nodeId);
+      if (el) {
+        el.style.left = state.nodes[nodeId].x + 'px';
+        el.style.top = state.nodes[nodeId].y + 'px';
+      }
+    });
+
     renderAll();
   }
 }
 function onDragUp() {
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mouseup',   onDragUp);
-  if (!state.dragMoved) { selectNode(state.dragId); openFocusPanel(state.dragId); }
+  if (!state.dragMoved) {
+    selectNode(state.dragId);
+    openFocusPanel(state.dragId);
+  } else {
+    // After drag, ensure selectedId is set to the dragged node
+    state.selectedId = state.dragId;
+    renderNodes();
+  }
   state.dragId = null;
 }
 
@@ -119,9 +180,68 @@ function onKeyDown(e) {
 }
 
 // ── Selection helpers ─────────────────────────────────────────
-function selectNode(id) { state.selectedId = id; renderNodes(); }
-function deselectAll()  { state.selectedId = null; renderNodes(); }
+function selectNode(id) {
+  state.selectedId = id;
+  state.selectedIds = [id];
+  renderNodes();
+}
+function deselectAll() {
+  state.selectedId = null;
+  state.selectedIds = [];
+  renderNodes();
+}
 
+// ── Rectangular selection ─────────────────────────────────────
+function renderRectSelection() {
+  let overlay = document.getElementById('rect-select-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'rect-select-overlay';
+    document.getElementById('world').appendChild(overlay);
+  }
+  const x1 = Math.min(state.rectStart.x, state.rectEnd.x);
+  const y1 = Math.min(state.rectStart.y, state.rectEnd.y);
+  const x2 = Math.max(state.rectStart.x, state.rectEnd.x);
+  const y2 = Math.max(state.rectStart.y, state.rectEnd.y);
+  overlay.style.left = x1 + 'px';
+  overlay.style.top = y1 + 'px';
+  overlay.style.width = (x2 - x1) + 'px';
+  overlay.style.height = (y2 - y1) + 'px';
+  overlay.style.display = 'block';
+}
+
+function removeRectOverlay() {
+  const overlay = document.getElementById('rect-select-overlay');
+  if (overlay) overlay.remove();
+}
+
+function updateRectSelection() {
+  const x1 = Math.min(state.rectStart.x, state.rectEnd.x);
+  const y1 = Math.min(state.rectStart.y, state.rectEnd.y);
+  const x2 = Math.max(state.rectStart.x, state.rectEnd.x);
+  const y2 = Math.max(state.rectStart.y, state.rectEnd.y);
+
+  // Skip if too small
+  if (x2 - x1 < 5 && y2 - y1 < 5) return;
+
+  const newSelected = [];
+  Object.values(state.nodes).forEach(n => {
+    if (n.x >= x1 && n.x <= x2 && n.y >= y1 && n.y <= y2) {
+      newSelected.push(n.id);
+    }
+  });
+
+  state.selectedIds = newSelected;
+  // Set selectedId to the first one for panel display
+  if (newSelected.length > 0) {
+    state.selectedId = newSelected[0];
+  } else {
+    state.selectedId = null;
+  }
+  renderNodes();
+}
+
+// ── Multi-drag support ────────────────────────────────────────
 // ── Add root focus (toolbar button) ──────────────────────────
 function addRootFocus() {
   // Place near viewport center in world space

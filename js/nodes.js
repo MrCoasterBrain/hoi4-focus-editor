@@ -23,6 +23,7 @@ function makeNode(gx, gy, focusId, label, gfxIcon, focusType) {
     x:                    snap(gx),
     y:                    snap(gy),
     label:                label || '',          // empty = use id as display
+    desc:                 '',                   // description text (TAG_focus_desc)
     gfxIcon:              gfxIcon || DEFAULT_ICON,
     cost:                 10,
     search_filters:       [],
@@ -83,6 +84,16 @@ function deleteNode(id) {
   if (state.treeMeta.initialShowFocus === id) state.treeMeta.initialShowFocus = '';
   delete state.nodes[id];
   AppConsole.log(`Deleted: ${id}`);
+}
+
+function clearAllFocuses() {
+  const count = Object.keys(state.nodes).length;
+  if (count === 0) { AppConsole.warn('No focuses to clear.'); return; }
+  state.nodes = {};
+  state.selectedId = null;
+  closePanel();
+  renderAll();
+  AppConsole.log(`Cleared all ${count} focuses.`);
 }
 
 function getEdges() {

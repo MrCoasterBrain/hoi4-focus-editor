@@ -288,3 +288,19 @@ textarea.field-input { resize: vertical; min-height: 56px; }
 /* ── BOTTOM ──────────────────────────────────────────────────── */
 #zoom-indicator { position: fixed; bottom: 12px; right: 12px; background: rgba(13,15,10,.85); border: 1px solid var(--border); padding: 5px 10px; font-family: 'Cinzel', serif; font-size: 10px; color: var(--text-dim); letter-spacing: 1px; z-index: 90; border-radius: 2px; transition: bottom .2s; }
 body:has(#app-console.open) #zoom-indicator { bottom: 212px; }
+
+/* ── RECTANGULAR SELECTION OVERLAY ─────────────────────────── */
+#rect-select-overlay {
+  position: absolute;
+  background: rgba(200, 168, 75, 0.12);
+  border: 1.5px solid rgba(200, 168, 75, 0.6);
+  pointer-events: none;
+  z-index: 50;
+  box-shadow: 0 0 8px rgba(200, 168, 75, 0.2);
+}
+
+/* ── MULTI-SELECTED NODE STYLE ─────────────────────────────── */
+.node.multi-selected .node-icon {
+  border-color: var(--gold) !important;
+  box-shadow: inset 0 0 6px rgba(0,0,0,.6), 0 0 14px rgba(200,168,75,.35), 0 2px 5px rgba(0,0,0,.5) !important;
+}

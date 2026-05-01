@@ -163,19 +163,20 @@ function renderNodes() {
   const badNodes = getInvalidPrereqNodes();
 
   Object.values(state.nodes).forEach(n => {
-    const isSel     = state.selectedId === n.id;
-    const hasEx     = (n.mutually_exclusive || []).some(eid => state.nodes[eid]);
-    const isBad     = badNodes.has(n.id);
-    const imgSrc    = getNodeIconSrc(n);
-    const label     = getNodeLabel(n);
-    const typeBadge = TYPE_BADGE[n.focusType];
+    const isSel        = state.selectedId === n.id;
+    const isMultiSel   = state.selectedIds.includes(n.id);
+    const hasEx        = (n.mutually_exclusive || []).some(eid => state.nodes[eid]);
+    const isBad        = badNodes.has(n.id);
+    const imgSrc       = getNodeIconSrc(n);
+    const label        = getNodeLabel(n);
+    const typeBadge    = TYPE_BADGE[n.focusType];
     // A node is "outside" if its HoI4 grid coords are negative
     const hx = Math.round(n.x / GRID_SIZE);
     const hy = Math.round(n.y / (GRID_SIZE * 2));
     const isOutside = hx < 0 || hy < 0;
 
     const el = document.createElement('div');
-    el.className = `node${isSel ? ' selected' : ''}${isBad ? ' invalid-prereq' : ''}${isOutside ? ' node-outside' : ''}`;
+    el.className = `node${isSel ? ' selected' : ''}${isMultiSel && !isSel ? ' multi-selected' : ''}${isBad ? ' invalid-prereq' : ''}${isOutside ? ' node-outside' : ''}`;
     el.id = 'node-' + n.id;
     el.style.left = n.x + 'px';
     el.style.top  = n.y + 'px';

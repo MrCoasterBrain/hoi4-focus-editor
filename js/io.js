@@ -31,10 +31,19 @@ function exportHoI4() {
     const T = '    ';
     let out = '';
 
+    // Export custom labels (display names)
     const customLabels = Object.values(state.nodes).filter(n => hasCustomLabel(n));
     if (customLabels.length > 0) {
       out += '# l_russian:\n';
       customLabels.forEach(n => { out += `#  ${n.id}: "${n.label}"\n`; });
+      out += '\n';
+    }
+
+    // Export descriptions (TAG_focus_desc)
+    const nodesWithDesc = Object.values(state.nodes).filter(n => n.desc && n.desc.trim());
+    if (nodesWithDesc.length > 0) {
+      out += '# l_russian_desc:\n';
+      nodesWithDesc.forEach(n => { out += `#  ${n.id}_desc: "${n.desc}"\n`; });
       out += '\n';
     }
 
@@ -288,6 +297,16 @@ function _findMissingRefs(nodes) {
 
 // ── HoI4 parser ───────────────────────────────────────────────
 function parseHoI4FocusTree(text) {
+  // First, extract descriptions from comments (TAG_focus_desc: "text")
+  var descs = {};
+  var commentLines = text.match(/#[^\n]*/g) || [];
+  commentLines.forEach(function(cl) {
+    var m = cl.match(/(\w+)_desc\s*:\s*"([^"]*)"/);
+    if (m) {
+      descs[m[1]] = m[2];
+    }
+  });
+
   var src    = text.replace(/#[^\n]*/g, '');
   var tokens = tokeniseClausewitz(src);
   var outerBlock = parseBlock(tokens, 0).block;
@@ -320,6 +339,9 @@ function parseHoI4FocusTree(text) {
   });
 
   _resolveRelativePositions(nodes, rawFocuses);
+
+  // Apply descriptions from comments
+  _applyDescs(nodes, descs);
 
   var cnt = Object.keys(nodes).length;
   AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
@@ -374,6 +396,7 @@ function _parseSingleFocus(blk, nodes, rawFocuses, focusType) {
     x: snap(Math.round(rawX * GRID_SIZE)),
     y: snap(rawY * GRID_SIZE * 2),
     label: '',
+    desc: '',
     gfxIcon: gv('icon') || DEFAULT_ICON,
     cost: parseFloat(gv('cost'))||10,
     search_filters: [], prerequisite_groups: [], mutually_exclusive: [],
@@ -403,6 +426,15 @@ function _parseSingleFocus(blk, nodes, rawFocuses, focusType) {
 
   nodes[fid] = node;
   rawFocuses.push({ id: fid, relId: relId, rawX: rawX, rawY: rawY });
+}
+
+// Apply descriptions from comments after parsing
+function _applyDescs(nodes, descs) {
+  Object.keys(descs).forEach(function(id) {
+    if (nodes[id]) {
+      nodes[id].desc = descs[id];
+    }
+  });
 }
 
 function _resolveRelativePositions(nodes, rawFocuses) {

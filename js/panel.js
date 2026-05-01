@@ -293,6 +293,7 @@ function refreshFocusPanel(id) {
   const n = state.nodes[id]; if (!n) return;
 
   document.getElementById('ep-label').value    = n.label || '';
+  document.getElementById('ep-desc').value     = n.desc || '';
   document.getElementById('ep-focus-id').value = n.id;
   document.getElementById('ep-gfx').value      = n.gfxIcon || '';
   document.getElementById('ep-cost').value     = n.cost;
