@@ -112,11 +112,11 @@ function _serializeFocus(n, indent, keyword) {
     out += II + 'mutually_exclusive = { focus = ' + eid + ' }\n';
   });
 
-  if (n.available)         out += II + 'available = {\n'         + II + T + n.available.trim()         + '\n' + II + '}\n';
-  if (n.bypass)            out += II + 'bypass = {\n'            + II + T + n.bypass.trim()            + '\n' + II + '}\n';
+  if (n.available)         out += II + 'available = {\n'         + _indentEachLine(n.available.trim(), II + T)         + '\n' + II + '}\n';
+  if (n.bypass)            out += II + 'bypass = {\n'            + _indentEachLine(n.bypass.trim(), II + T)            + '\n' + II + '}\n';
   if (n.cancel_if_invalid) out += II + 'cancel_if_invalid = yes\n';
-  if (n.allow_branch)      out += II + 'allow_branch = {\n'         + II + T + n.allow_branch.trim()         + '\n' + II + '}\n';
-  if (n.completion_reward) out += II + 'completion_reward = {\n' + II + T + n.completion_reward.trim() + '\n' + II + '}\n';
+  if (n.allow_branch)      out += II + 'allow_branch = {\n'      + _indentEachLine(n.allow_branch.trim(), II + T)      + '\n' + II + '}\n';
+  if (n.completion_reward) out += II + 'completion_reward = {\n' + _indentEachLine(n.completion_reward.trim(), II + T) + '\n' + II + '}\n';
 
   out += I + '}\n\n';
   return out;
@@ -128,17 +128,36 @@ let _importAccNodes    = null;
 let _importAccMeta     = null;
 // Set of all required focus IDs found via shared_focus = id references
 let _importRequiredIds = new Set();
+// Maps filename → array of focus IDs for non-normal types (shared/joint) from full blocks
+let _importGroupMap    = null;
 
 function importHoI4() {
-  _pickFile('.txt,.hoi4', text => {
+  _pickFile('.txt,.hoi4', (text, fileName) => {
     try {
       const result = parseHoI4FocusTree(text);
 
-      // First file — initialise accumulators
-      if (_importAccNodes === null) {
+      // If modal is not open, this is a fresh import — start fresh accumulators
+      const modalOpen = !!document.getElementById('missing-refs-modal');
+      if (!modalOpen) {
+        _resetImportSession();
         _importAccNodes = {};
         _importAccMeta  = { treeId: '', countryBlock: '', initialShowFocus: '', cfX: 100, cfY: 1230 };
         _importRequiredIds = new Set();
+        _importGroupMap = {};
+      }
+
+      // If this file produced no nodes AND no inline refs — skip (it's empty/useless)
+      const newNodeCount = Object.keys(result.nodes).length;
+      const hasInlineRefs = result.inlineSharedRefs && result.inlineSharedRefs.length > 0;
+      if (newNodeCount === 0 && !hasInlineRefs) {
+        AppConsole.warn('Файл "' + fileName + '" не содержит фокусов.');
+        return;
+      }
+
+      // Record external IDs if this file contributes shared/joint blocks
+      // "External" means top-level blocks (outside any focus_tree)
+      if (result.externalGroupIds && result.externalGroupIds.length > 0) {
+        _importGroupMap[fileName] = result.externalGroupIds;
       }
 
       // Merge nodes
@@ -159,20 +178,19 @@ function importHoI4() {
       state.nodes    = _importAccNodes;
       state.treeMeta = { ...state.treeMeta, ..._importAccMeta };
       state.selectedId = null;
-      closePanel(); renderAll();
-      AppConsole.log('Imported: ' + Object.keys(_importAccNodes).length + ' focuses total.');
+      closePanel();
+      _rebuildExternalGroups();
+      renderAll();
+      AppConsole.log('Imported: ' + Object.keys(_importAccNodes).length + ' focuses total (from "' + fileName + '").');
 
       // Which required IDs are still missing?
       const stillMissing = Array.from(_importRequiredIds).filter(id => !_importAccNodes[id]);
 
       if (stillMissing.length > 0) {
         _showMissingModal();
-      } else if (_importRequiredIds.size > 0) {
-        // Had requirements, all now satisfied — auto-close and reset
-        _closeMissingModal(true);
       } else {
-        // No cross-file requirements at all — clean session end
-        _resetImportSession();
+        // All requirements satisfied or no requirements — close modal if open, keep accumulators
+        _closeMissingModal(true);
       }
     } catch(e) {
       AppConsole.error('Import HoI4: ' + e.message);
@@ -185,6 +203,20 @@ function _resetImportSession() {
   _importAccNodes    = null;
   _importAccMeta     = null;
   _importRequiredIds = new Set();
+  _importGroupMap    = null;
+}
+
+function _rebuildExternalGroups() {
+  // Build sharedFocusGroups from all nodes with type SHARED or JOINT that came from external files
+  // For simplicity, group by filename stored in _importGroupMap
+  state.sharedFocusGroups = [];
+  if (!_importGroupMap) return;
+  Object.keys(_importGroupMap).forEach(name => {
+    const ids = (_importGroupMap[name] || []).filter(id => state.nodes[id]);
+    if (ids.length > 0) {
+      state.sharedFocusGroups.push({ name: name, ids: ids });
+    }
+  });
 }
 
 // ── Missing-refs modal ────────────────────────────────────────
@@ -317,6 +349,8 @@ function parseHoI4FocusTree(text) {
   var rawFocuses = [];
   // Inline shared_focus = focus_id references (not full blocks)
   var inlineSharedRefs = [];
+  // IDs from full shared_focus = { ... } / joint_focus = { ... } blocks at top level (external)
+  var externalGroupIds = [];
 
   outerBlock.forEach(function(item) {
     if (!item || item.type !== 'assign') return;
@@ -325,12 +359,18 @@ function parseHoI4FocusTree(text) {
     } else if (item.key === 'shared_focus') {
       if (item.block) {
         _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_SHARED);
+        // Collect id for external grouping
+        var sid = (item.block.find(function(b){ return b.key==='id'; })||{}).value;
+        if (sid && externalGroupIds.indexOf(sid) === -1) externalGroupIds.push(sid);
       } else if (item.value) {
         if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
       }
     } else if (item.key === 'joint_focus') {
       if (item.block) {
         _parseSingleFocus(item.block, nodes, rawFocuses, FOCUS_TYPE_JOINT);
+        // Collect id for external grouping
+        var jid = (item.block.find(function(b){ return b.key==='id'; })||{}).value;
+        if (jid && externalGroupIds.indexOf(jid) === -1) externalGroupIds.push(jid);
       } else if (item.value) {
         if (!inlineSharedRefs.includes(item.value)) inlineSharedRefs.push(item.value);
       }
@@ -345,9 +385,15 @@ function parseHoI4FocusTree(text) {
   _applyDescs(nodes, descs);
 
   var cnt = Object.keys(nodes).length;
-  AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
-  if (cnt === 0) AppConsole.warn('No focuses found — check file format.');
-  return { nodes: nodes, treeMeta: treeMeta, inlineSharedRefs: inlineSharedRefs };
+  if (treeMeta.treeId) AppConsole.log('Parsed: treeId="' + treeMeta.treeId + '", ' + cnt + ' focuses.');
+  else if (cnt > 0) AppConsole.log('Parsed: ' + cnt + ' external focuses.');
+  else AppConsole.warn('No focuses found — check file format.');
+  return {
+    nodes: nodes,
+    treeMeta: treeMeta,
+    inlineSharedRefs: inlineSharedRefs,
+    externalGroupIds: externalGroupIds
+  };
 }
 
 function _parseFocusTreeBlock(root, treeMeta, nodes, rawFocuses, defaultType, inlineSharedRefs) {
@@ -441,25 +487,25 @@ function _applyDescs(nodes, descs) {
 }
 
 function _resolveRelativePositions(nodes, rawFocuses) {
-  var maxPasses = 30;
-  var unresolved = rawFocuses.filter(function(r){ return r.relId; });
-  while (unresolved.length > 0 && maxPasses-- > 0) {
-    var stillUnresolved = [];
-    var progressMade = false;
-    unresolved.forEach(function(r) {
+  var maxPasses = 50;
+  var changed = true;
+  while (changed && maxPasses-- > 0) {
+    changed = false;
+    rawFocuses.forEach(function(r) {
+      if (!r.relId) return;
       var parent = nodes[r.relId];
-      if (!parent) { progressMade = true; return; }
-      var parentStillPending = stillUnresolved.some(function(u){ return u.id === r.relId; });
-      if (parentStillPending) { stillUnresolved.push(r); return; }
-      nodes[r.id].x = snap(parent.x + Math.round(r.rawX * GRID_SIZE));
-      nodes[r.id].y = snap(parent.y + r.rawY * GRID_SIZE * 2);
-      progressMade = true;
+      if (!parent) return;
+      var expectedX = snap(parent.x + Math.round(r.rawX * GRID_SIZE));
+      var expectedY = snap(parent.y + r.rawY * GRID_SIZE * 2);
+      if (nodes[r.id].x !== expectedX || nodes[r.id].y !== expectedY) {
+        nodes[r.id].x = expectedX;
+        nodes[r.id].y = expectedY;
+        changed = true;
+      }
     });
-    if (!progressMade) break;
-    unresolved = stillUnresolved;
   }
-  if (unresolved.length > 0)
-    AppConsole.warn(unresolved.length + ' focuses could not resolve relative_position_id');
+  if (!changed && maxPasses <= 0)
+    AppConsole.warn('Some focuses could not resolve relative_position_id (check for circular dependencies)');
 }
 
 // ── Clausewitz tokeniser ──────────────────────────────────────
@@ -506,6 +552,13 @@ function blockToRaw(block, indent) {
   }).join('\n');
 }
 
+// ── Indent helper ────────────────────────────────────────────
+// Prefix each line of text with indent; skip empty lines
+function _indentEachLine(text, indent) {
+  if (!text) return '';
+  return text.split('\n').map(line => indent + line).join('\n');
+}
+
 // ── Helpers ───────────────────────────────────────────────────
 function _download(content, filename, mime) {
   var blob = new Blob([content],{type:mime});
@@ -519,7 +572,10 @@ function _pickFile(accept, callback) {
   input.onchange = function(ev) {
     var file = ev.target.files[0]; if (!file) return;
     var fr = new FileReader();
-    fr.onload = function(e) { callback(e.target.result); };
+    fr.onload = function(e) {
+      // Pass filename along with content
+      callback(e.target.result, file.name);
+    };
     fr.readAsText(file);
   };
   input.click();

@@ -29,4 +29,8 @@ const state = {
   ctxWorldPos: null,
   // True when right-click started on empty canvas (for "New Focus Here" on click)
   canvasCtxClick: false,
+
+  // Shared focus groups imported from external files
+  // Each entry: { name: "filename.txt", ids: ["FOCUS_1", "FOCUS_2", ...] }
+  sharedFocusGroups: [],
 };

@@ -1,6 +1,6 @@
 // js/render.js
 
-function renderAll() { renderBoundary(); renderCF(); renderEdges(); renderNodes(); }
+function renderAll() { renderBoundary(); renderCF(); renderEdges(); renderSharedFocusFrames(); renderNodes(); }
 
 // ── Tree boundary ─────────────────────────────────────────────
 // Nodes are centered at their (x,y) with transform: translate(-50%,-50%).
@@ -222,6 +222,50 @@ function renderNodes() {
       coordsEl.textContent = `x = ${hx}  y = ${hy}  (px: ${n.x}, ${n.y})`;
     }
   }
+}
+
+// ── Shared focus group frames ────────────────────────────────
+const FRAME_PAD = 80; // padding around nodes inside frame
+
+function renderSharedFocusFrames() {
+  const world = document.getElementById('world');
+  // Remove old frames
+  world.querySelectorAll('.shared-frame').forEach(el => el.remove());
+
+  if (!state.sharedFocusGroups || state.sharedFocusGroups.length === 0) return;
+
+  state.sharedFocusGroups.forEach(group => {
+    const ids = group.ids.filter(id => state.nodes[id]);
+    if (ids.length === 0) return;
+
+    // Compute bounding box of all nodes in this group
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    ids.forEach(id => {
+      const n = state.nodes[id];
+      if (!n) return;
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.x > maxX) maxX = n.x;
+      if (n.y > maxY) maxY = n.y;
+    });
+
+    if (!isFinite(minX)) return;
+
+    const frame = document.createElement('div');
+    frame.className = 'shared-frame';
+    frame.style.left   = (minX - FRAME_PAD) + 'px';
+    frame.style.top    = (minY - FRAME_PAD) + 'px';
+    frame.style.width  = (maxX - minX + FRAME_PAD * 2) + 'px';
+    frame.style.height = (maxY - minY + FRAME_PAD * 2) + 'px';
+
+    // File name label
+    const label = document.createElement('div');
+    label.className = 'shared-frame-label';
+    label.textContent = group.name;
+    frame.appendChild(label);
+
+    world.appendChild(frame);
+  });
 }
 
 // ── Tooltip ───────────────────────────────────────────────────
