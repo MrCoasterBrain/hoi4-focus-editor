@@ -24,4 +24,9 @@ const state = {
   rectSelecting: false,
   rectStart: {x:0, y:0},
   rectEnd: {x:0, y:0},
+
+  // Canvas context menu position (world coords)
+  ctxWorldPos: null,
+  // True when right-click started on empty canvas (for "New Focus Here" on click)
+  canvasCtxClick: false,
 };

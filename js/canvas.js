@@ -6,13 +6,32 @@ function setupCanvas() {
   wrap.addEventListener('mousemove', onCanvasMove);
   wrap.addEventListener('mouseup',   onCanvasUp);
   wrap.addEventListener('wheel', onWheel, { passive: false });
-  wrap.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('contextmenu', e => {
+    // Prevent ALL browser context menus everywhere in the editor
+    e.preventDefault();
+  });
   document.addEventListener('keydown', onKeyDown);
 }
 
-// ── Pan ───────────────────────────────────────────────────────
+// ── Pan & canvas context menu ────────────────────────────────
 function onCanvasDown(e) {
   if (e.button === 2) {
+    const t = e.target;
+    // Right-click on empty canvas space — start pan (drag) OR show context menu (no drag)
+    if (t.id === 'canvas-wrap' || t.id === 'world' || t.id === 'svg-layer') {
+      state.isPanning  = true;
+      state.panStart   = { x: e.clientX, y: e.clientY };
+      state.panOrigin  = { x: state.panX, y: state.panY };
+      document.getElementById('canvas-wrap').classList.add('panning');
+      // Save world pos for "New Focus Here" in case pan is just a click (no drag)
+      const worldPos = screenToWorld(e.clientX, e.clientY);
+      state.ctxWorldPos = { x: snap(worldPos.x), y: snap(worldPos.y) };
+      state.canvasCtxClick = true;
+      e.preventDefault();
+      return;
+    }
+    // Right-click on a node or other element — start panning (drag to pan)
+    state.canvasCtxClick = false;
     state.isPanning  = true;
     state.panStart   = { x: e.clientX, y: e.clientY };
     state.panOrigin  = { x: state.panX, y: state.panY };
@@ -50,6 +69,15 @@ function onCanvasUp(e) {
   if (e.button === 2 && state.isPanning) {
     state.isPanning = false;
     document.getElementById('canvas-wrap').classList.remove('panning');
+    // If right-click on empty canvas without dragging — show "New Focus Here" menu
+    if (state.canvasCtxClick && state.ctxWorldPos) {
+      const dx = Math.abs(e.clientX - state.panStart.x);
+      const dy = Math.abs(e.clientY - state.panStart.y);
+      if (dx < 5 && dy < 5) {
+        showCanvasCtxMenu(e.clientX, e.clientY);
+      }
+    }
+    state.canvasCtxClick = false;
   }
   if (e.button === 0 && state.rectSelecting) {
     state.rectSelecting = false;
@@ -126,15 +154,13 @@ function onDragMove(e) {
     const dy = newY - state.nodes[state.dragId].y;
 
     // Move all selected nodes by the same delta
+    const movedIds = new Set();
     state.selectedIds.forEach(nodeId => {
-      if (state.nodes[nodeId]) {
-        state.nodes[nodeId].x += dx;
-        state.nodes[nodeId].y += dy;
-      }
+      _moveNodeWithChildren(nodeId, dx, dy, movedIds);
     });
 
-    // Update DOM positions for all selected nodes
-    state.selectedIds.forEach(nodeId => {
+    // Update DOM positions for all moved nodes
+    movedIds.forEach(nodeId => {
       const el = document.getElementById('node-' + nodeId);
       if (el) {
         el.style.left = state.nodes[nodeId].x + 'px';
@@ -241,7 +267,20 @@ function updateRectSelection() {
   renderNodes();
 }
 
-// ── Multi-drag support ────────────────────────────────────────
+// ── Recursive node move with children ─────────────────────────
+function _moveNodeWithChildren(nodeId, dx, dy, movedIds) {
+  if (!state.nodes[nodeId] || movedIds.has(nodeId)) return;
+  state.nodes[nodeId].x += dx;
+  state.nodes[nodeId].y += dy;
+  movedIds.add(nodeId);
+  // Move all nodes that reference this one as relative_position_id
+  Object.values(state.nodes).forEach(n => {
+    if (n.relative_position_id === nodeId && !movedIds.has(n.id)) {
+      _moveNodeWithChildren(n.id, dx, dy, movedIds);
+    }
+  });
+}
+
 // ── Add root focus (toolbar button) ──────────────────────────
 function addRootFocus() {
   // Place near viewport center in world space

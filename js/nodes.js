@@ -35,6 +35,7 @@ function makeNode(gx, gy, focusId, label, gfxIcon, focusType) {
     available:            '',
     bypass:               '',
     cancel_if_invalid:    false,
+    allow_branch:         '',
   };
   AppConsole.log(`Created focus: ${fid}`);
   return fid;

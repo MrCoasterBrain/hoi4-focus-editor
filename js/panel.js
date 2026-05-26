@@ -317,6 +317,7 @@ function refreshFocusPanel(id) {
   document.getElementById('ep-available').value = n.available || '';
   document.getElementById('ep-bypass').value    = n.bypass    || '';
   document.getElementById('ep-cancel').checked  = n.cancel_if_invalid || false;
+  document.getElementById('ep-allow-branch').value = n.allow_branch || '';
 
   document.querySelectorAll('.filter-tag').forEach(b =>
     b.classList.toggle('active-filter', (n.search_filters || []).includes(b.dataset.f)));
@@ -468,6 +469,11 @@ function updateTreeMeta(key, val) {
 let _ctxMenuOpen = false;
 
 function showCtxMenu(x, y) {
+  // Show node-specific items, hide canvas "New Focus Here"
+  document.getElementById('ctx-create-focus').style.display = 'none';
+  document.getElementById('ctx-sep-create').style.display = 'none';
+  document.querySelectorAll('#ctx-menu .ctx-item:not(#ctx-create-focus)').forEach(el => el.style.display = 'flex');
+  document.querySelectorAll('#ctx-menu .ctx-sep:not(#ctx-sep-create)').forEach(el => el.style.display = 'block');
   const m = document.getElementById('ctx-menu');
   m.style.display = 'block';
   m.style.left = Math.min(x, window.innerWidth  - 210) + 'px';
@@ -486,6 +492,29 @@ function closeCtxMenu() {
   _ctxMenuOpen = false;
   document.getElementById('ctx-menu').style.display = 'none';
   document.removeEventListener('mousedown', _onOutsideCtxClick);
+}
+
+function showCanvasCtxMenu(x, y) {
+  closeCtxMenu();
+  // Show "New Focus Here", hide node-specific items
+  document.getElementById('ctx-create-focus').style.display = 'block';
+  document.getElementById('ctx-sep-create').style.display = 'block';
+  document.querySelectorAll('#ctx-menu .ctx-item:not(#ctx-create-focus)').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('#ctx-menu .ctx-sep:not(#ctx-sep-create)').forEach(el => el.style.display = 'none');
+  const m = document.getElementById('ctx-menu');
+  m.style.display = 'block';
+  m.style.left = Math.min(x, window.innerWidth  - 210) + 'px';
+  m.style.top  = Math.min(y, window.innerHeight - 100) + 'px';
+  _ctxMenuOpen = true;
+  setTimeout(() => { document.addEventListener('mousedown', _onOutsideCtxClick); }, 0);
+}
+
+function ctxCreateFocus() {
+  closeCtxMenu();
+  if (!state.ctxWorldPos) return;
+  const id = makeNode(state.ctxWorldPos.x, state.ctxWorldPos.y);
+  renderAll(); selectNode(id); openFocusPanel(id);
+  state.ctxWorldPos = null;
 }
 
 function ctxEdit()   { closeCtxMenu(); selectNode(state.ctxNodeId); openFocusPanel(state.ctxNodeId); }

@@ -115,6 +115,7 @@ function _serializeFocus(n, indent, keyword) {
   if (n.available)         out += II + 'available = {\n'         + II + T + n.available.trim()         + '\n' + II + '}\n';
   if (n.bypass)            out += II + 'bypass = {\n'            + II + T + n.bypass.trim()            + '\n' + II + '}\n';
   if (n.cancel_if_invalid) out += II + 'cancel_if_invalid = yes\n';
+  if (n.allow_branch)      out += II + 'allow_branch = {\n'         + II + T + n.allow_branch.trim()         + '\n' + II + '}\n';
   if (n.completion_reward) out += II + 'completion_reward = {\n' + II + T + n.completion_reward.trim() + '\n' + II + '}\n';
 
   out += I + '}\n\n';
@@ -402,6 +403,7 @@ function _parseSingleFocus(blk, nodes, rawFocuses, focusType) {
     search_filters: [], prerequisite_groups: [], mutually_exclusive: [],
     relative_position_id: relId,
     completion_reward: '', available: '', bypass: '', cancel_if_invalid: false,
+    allow_branch: '',
   };
 
   blk.forEach(function(it) {
@@ -418,7 +420,8 @@ function _parseSingleFocus(blk, nodes, rawFocuses, focusType) {
       (it.block||[]).forEach(function(t) {
         if (t.type==='value' && node.search_filters.indexOf(t.value)===-1) node.search_filters.push(t.value);
       });
-    } else if (it.key === 'completion_reward') { node.completion_reward = blockToRaw(it.block||[],''); }
+    } else if (it.key === 'allow_branch')      { node.allow_branch      = blockToRaw(it.block||[],''); }
+    else if (it.key === 'completion_reward') { node.completion_reward = blockToRaw(it.block||[],''); }
     else if (it.key === 'available')           { node.available         = blockToRaw(it.block||[],''); }
     else if (it.key === 'bypass')              { node.bypass            = blockToRaw(it.block||[],''); }
     else if (it.key === 'cancel_if_invalid')   { node.cancel_if_invalid = it.value==='yes'; }
@@ -494,11 +497,11 @@ function parseBlock(tokens, pos) {
 }
 
 function blockToRaw(block, indent) {
-  if (indent===undefined) indent='\t';
+  if (indent===undefined) indent='    ';
   return block.map(function(item) {
     if (item.type==='value') return indent+item.value;
     if (!item.block) return indent+item.key+' = '+item.value;
-    var inner=blockToRaw(item.block,indent+'\t');
+    var inner=blockToRaw(item.block,indent+'    ');
     return indent+item.key+' = {\n'+inner+'\n'+indent+'}';
   }).join('\n');
 }

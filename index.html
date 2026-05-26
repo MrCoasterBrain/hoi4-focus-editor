@@ -40,6 +40,8 @@
 
 <!-- ══ CONTEXT MENU ══════════════════════════════════════════════════════════ -->
 <div id="ctx-menu">
+  <div class="ctx-item" id="ctx-create-focus" onclick="ctxCreateFocus()">＋ New Focus Here</div>
+  <div class="ctx-sep" id="ctx-sep-create"></div>
   <div class="ctx-item" onclick="ctxEdit()">✎ Edit properties</div>
   <div class="ctx-sep"></div>
   <div class="ctx-item danger" onclick="ctxDelete()">🗑 Delete focus</div>
@@ -157,6 +159,12 @@
       <label class="field-label">bypass = { … }</label>
       <textarea class="field-input" id="ep-bypass" rows="2" placeholder="has_war = yes"
                 oninput="updateNodeProp('bypass',this.value)"></textarea>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">allow_branch = { … }</label>
+      <textarea class="field-input" id="ep-allow-branch" rows="2" placeholder="always = no"
+                oninput="updateNodeProp('allow_branch',this.value)"></textarea>
     </div>
 
     <div class="field-group">
