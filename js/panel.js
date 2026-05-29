@@ -443,6 +443,76 @@ function refreshIconPicker(currentGfx) {
     b.classList.toggle('active-icon', b.dataset.gfx === currentGfx));
 }
 
+// ── Fullscreen icon picker modal ──────────────────────────────
+function openFullscreenIconPicker() {
+  const modal = document.getElementById('fs-icon-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  renderFullscreenIconGrid('');
+  // Sync search with current panel search
+  const fsSearch = document.getElementById('fs-icon-search');
+  if (fsSearch) fsSearch.value = document.getElementById('ep-icon-search').value;
+  // Focus search input
+  if (fsSearch) setTimeout(() => fsSearch.focus(), 50);
+  // Listen for Escape
+  document.addEventListener('keydown', _onFsIconKeydown);
+}
+
+function closeFullscreenIconPicker() {
+  const modal = document.getElementById('fs-icon-modal');
+  if (modal) modal.style.display = 'none';
+  document.removeEventListener('keydown', _onFsIconKeydown);
+}
+
+function _onFsIconKeydown(e) {
+  if (e.key === 'Escape') {
+    closeFullscreenIconPicker();
+  }
+}
+
+function renderFullscreenIconGrid(filter) {
+  const grid = document.getElementById('fs-icon-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const keys = Object.keys(SPRITE_MAP);
+  const focusKeys = keys.filter(k =>
+    (k.startsWith('GFX_focus_') || k.startsWith('GFX_goal_')) &&
+    !k.includes('fast_overlay') && !k.includes('shine_test')
+  );
+  const filtered = filter ? focusKeys.filter(k => k.toLowerCase().includes(filter)) : focusKeys;
+  
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text-dim);font-family:Cinzel,serif;font-size:11px;grid-column:1/-1;text-align:center;padding:40px">No icons found</div>';
+    return;
+  }
+
+  const currentGfx = state.selectedId ? (state.nodes[state.selectedId] || {}).gfxIcon : '';
+
+  filtered.forEach(gfxName => {
+    const btn = document.createElement('div');
+    btn.className = 'icon-btn' + (gfxName === currentGfx ? ' fs-icon-active' : '');
+    btn.title = gfxName;
+    btn.dataset.gfx = gfxName;
+    const imgSrc = SPRITE_MAP[gfxName];
+    if (imgSrc) {
+      const img = document.createElement('img');
+      img.src = imgSrc; img.alt = gfxName; img.draggable = false;
+      img.onerror = () => { img.style.display='none'; btn.textContent='?'; };
+      btn.appendChild(img);
+    } else { btn.textContent = '?'; }
+    btn.onclick = () => {
+      if (state.selectedId) {
+        updateNodeProp('gfxIcon', gfxName);
+        document.getElementById('ep-gfx').value = gfxName;
+        // Update active state in fullscreen grid
+        grid.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('fs-icon-active'));
+        btn.classList.add('fs-icon-active');
+      }
+    };
+    grid.appendChild(btn);
+  });
+}
+
 // ── Tree panel ────────────────────────────────────────────────
 function refreshTreePanel() {
   document.getElementById('tp-tree-id').value = state.treeMeta.treeId;

@@ -97,6 +97,7 @@
 
     <div class="field-group">
       <label class="field-label">Icon Picker</label>
+      <button class="fs-icon-trigger" onclick="openFullscreenIconPicker()">⛶ Open fullscreen browser</button>
       <input type="text" id="ep-icon-search" placeholder="Search icons…">
       <div id="ep-icon-grid"></div>
     </div>
@@ -233,6 +234,18 @@
     <button id="app-console-clear" onclick="AppConsole.clear()">Clear</button>
   </div>
   <div id="app-console-body"></div>
+</div>
+
+<!-- ══ FULLSCREEN ICON PICKER MODAL ═════════════════════════════════════════ -->
+<div id="fs-icon-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeFullscreenIconPicker()">
+  <div class="fs-icon-box">
+    <div class="fs-icon-header">
+      <span class="fs-icon-title">Icon Browser</span>
+      <button class="fs-icon-close" onclick="closeFullscreenIconPicker()">✕</button>
+    </div>
+    <input type="text" id="fs-icon-search" placeholder="Search icons…" oninput="renderFullscreenIconGrid(this.value.trim().toLowerCase())">
+    <div id="fs-icon-grid"></div>
+  </div>
 </div>
 
 <!-- ══ MISC ══════════════════════════════════════════════════════════════════ -->
